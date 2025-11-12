@@ -110,7 +110,7 @@ public:
     template<typename T>
     void SetRaw(size_t row, size_t col, const T& value)
     {
-        std::memcpy(GetRawCell(row, col), &value, sizeof(T));
+        std::memcpy(GetRawCellMutable(row, col), &value, sizeof(T));
     }
 
     /// <summary>
@@ -144,7 +144,7 @@ public:
     {
         if (!IsValid(row, col)) return false;
         size_t copySize = std::min(sizeof(T), mColumns[col].stride);
-        std::memcpy(GetRawCell(row, col), &value, copySize);
+        std::memcpy(GetRawCellMutable(row, col), &value, copySize);
         return true;
     }
 
@@ -154,7 +154,11 @@ public:
     /// <param name="src"></param>
     void LoadRaw(const std::vector<uint8_t>& src)
     {
-        size_t rows = src.size() / GetRowStride();
+        size_t rowStride = GetRowStride();
+        if (rowStride == 0)
+            throw std::runtime_error("Cannot load data: row stride is zero (no columns defined)");
+
+        size_t rows = src.size() / rowStride;
         InitializeColumns(rows);
         LoadDataFromRowMajor(src, rows);
     }
