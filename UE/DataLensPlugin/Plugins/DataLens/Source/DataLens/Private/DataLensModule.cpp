@@ -1,6 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-#include "DataLens.h"
+#include "DataLensModule.h"
 
 #define LOCTEXT_NAMESPACE "FDataLensModule"
 
