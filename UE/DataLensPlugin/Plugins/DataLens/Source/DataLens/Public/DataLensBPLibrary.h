@@ -385,6 +385,8 @@ public:
                 Result.Timestamp = FDateTime::Now().ToString();
                 Result.Rows = RowCount;
                 Result.Columns = ColCount;
+                Result.RowSpanBytes = RowStride;
+                Result.TotalMemoryBytes = RowStride * Result.Rows;
 
                 bool bSuccess = true;
                 FString Notes;
@@ -494,6 +496,8 @@ public:
                 Result.Timestamp = FDateTime::Now().ToString();
                 Result.Rows = RowCount;
                 Result.Columns = ColCount;
+                Result.RowSpanBytes = RowStride;
+                Result.TotalMemoryBytes = RowStride * Result.Rows;
 
                 bool bSuccess = true;
                 FString Notes;
@@ -591,6 +595,8 @@ public:
                 Result.Timestamp = FDateTime::Now().ToString();
                 Result.Rows = RowCount;
                 Result.Columns = ColCount;
+                Result.RowSpanBytes = RowStride;
+                Result.TotalMemoryBytes = RowStride * Result.Rows;
 
                 bool bSuccess = true;
                 FString Notes;
@@ -690,7 +696,8 @@ public:
                 Result.Timestamp = FDateTime::Now().ToString();
                 Result.Rows = RowCount;
                 Result.Columns = ColCount;
-
+                Result.RowSpanBytes = RowStride;
+                Result.TotalMemoryBytes = RowStride * Result.Rows;
                 bool bSuccess = true;
                 FString Notes;
 
@@ -840,7 +847,10 @@ public:
         Result.Rows = 1;
         Result.Columns = 3;
         Result.RowSpanBytes = 0;
-        for (auto& C : Cols) Result.RowSpanBytes += C.stride;
+
+        for (auto& C : Cols) 
+            Result.RowSpanBytes += C.stride;
+        
         Result.TotalMemoryBytes = Result.RowSpanBytes * Result.Rows;
         Result.DurationMs = 0.0;
 
@@ -883,7 +893,7 @@ public:
 
                 const double StartCycles = FPlatformTime::Cycles64();
 
-                DataStore Store;
+                DataStore Store(Cols, 0); // 0 prealloc rows, just sets up columns
                 Store.LoadRaw(DataBuffer);
 
                 const double EndCycles = FPlatformTime::Cycles64();
