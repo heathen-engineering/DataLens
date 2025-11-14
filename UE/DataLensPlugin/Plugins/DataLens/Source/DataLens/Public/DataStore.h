@@ -7,15 +7,12 @@
  * per-column stride. Supports both raw and safe access to table cells.
  *
  * Author: James McGhee
- * Date:   2025-11-04
+ * Date:   2025-11-04 - 2025-11-14
  ******************************************************************************/
 
 #pragma once
 
-#include <vector>
-#include <cstdint>
-#include <stdexcept>
-#include <cstring>
+#include "DataLensSchema.h"
 
  /// <summary>
  /// DataStore provides a column-oriented, in-memory table of raw bytes with
@@ -26,15 +23,6 @@
 class DataStore
 {
 public:
-    /// <summary>
-    /// Metadata per column
-    /// </summary>
-    struct ColumnMeta
-    {
-        size_t stride; // number of bytes this column occupies
-        // Potential future flags: endian, type hints, etc.
-    };
-
     DataStore() = default;
 
     /// <summary>
@@ -42,30 +30,14 @@ public:
     /// </summary>
     /// <param name="columns"></param>
     /// <param name="preallocRows"></param>
-    DataStore(const std::vector<ColumnMeta>& columns, size_t preallocRows)
-        : mColumns(columns), mRowCount(preallocRows)
-    {
-        mColumnsData.resize(columns.size());
-        for (size_t c = 0; c < columns.size(); ++c)
-            mColumnsData[c].resize(columns[c].stride * preallocRows);
-    }
+    DataStore(const std::vector<ColumnSchema>& columns, size_t preallocRows);
 
     /// <summary>
     /// Initialize with column metadata and pre-load data from a byte array (row-major layout).
     /// </summary>
     /// <param name="columns"></param>
     /// <param name="data"></param>
-    DataStore(const std::vector<ColumnMeta>& columns, const std::vector<uint8_t>& data)
-        : mColumns(columns)
-    {
-        size_t rowStride = GetRowStride();
-        if (data.size() % rowStride != 0)
-            throw std::runtime_error("Data size is not a multiple of row stride");
-
-        size_t rows = data.size() / rowStride;
-        InitializeColumns(rows);
-        LoadDataFromRowMajor(data, rows);
-    }
+    DataStore(const std::vector<ColumnSchema>& columns, const std::vector<uint8_t>& data);
 
     /// <summary>
     /// Initialize with column metadata, pre-load data, and optionally preallocate extra rows.
@@ -73,17 +45,7 @@ public:
     /// <param name="columns"></param>
     /// <param name="data"></param>
     /// <param name="extraRows"></param>
-    DataStore(const std::vector<ColumnMeta>& columns, const std::vector<uint8_t>& data, size_t extraRows)
-        : mColumns(columns)
-    {
-        size_t rowStride = GetRowStride();
-        if (data.size() % rowStride != 0)
-            throw std::runtime_error("Data size is not a multiple of row stride");
-
-        size_t loadedRows = data.size() / rowStride;
-        InitializeColumns(loadedRows + extraRows);
-        LoadDataFromRowMajor(data, loadedRows);
-    }
+    DataStore(const std::vector<ColumnSchema>& columns, const std::vector<uint8_t>& data, size_t extraRows);
 
     /// <summary>
     /// Get a typed value from a cell (unchecked).
@@ -126,7 +88,7 @@ public:
     {
         if (!IsValid(row, col)) return false;
         outValue = T{};
-        size_t copySize = std::min(sizeof(T), mColumns[col].stride);
+        size_t copySize = std::min(sizeof(T), mColumns[col].GetStride());
         std::memcpy(&outValue, GetRawCell(row, col), copySize);
         return true;
     }
@@ -143,7 +105,7 @@ public:
     bool TrySet(size_t row, size_t col, const T& value)
     {
         if (!IsValid(row, col)) return false;
-        size_t copySize = std::min(sizeof(T), mColumns[col].stride);
+        size_t copySize = std::min(sizeof(T), mColumns[col].GetStride());
         std::memcpy(GetRawCellMutable(row, col), &value, copySize);
         return true;
     }
@@ -152,54 +114,27 @@ public:
     /// Load raw row-major data into the datastore.
     /// </summary>
     /// <param name="src"></param>
-    void LoadRaw(const std::vector<uint8_t>& src)
-    {
-        size_t rowStride = GetRowStride();
-        if (rowStride == 0)
-            throw std::runtime_error("Cannot load data: row stride is zero (no columns defined)");
-
-        size_t rows = src.size() / rowStride;
-        InitializeColumns(rows);
-        LoadDataFromRowMajor(src, rows);
-    }
+    void LoadRaw(const std::vector<uint8_t>& src);
 
     /// <summary>
     /// Dump the current table data in row-major layout.
     /// </summary>
     /// <returns></returns>
-    std::vector<uint8_t> Dump() const
-    {
-        size_t rowStride = GetRowStride();
-        std::vector<uint8_t> out(rowStride * mRowCount);
-        for (size_t r = 0; r < mRowCount; ++r)
-        {
-            size_t offset = r * rowStride;
-            for (size_t c = 0; c < mColumns.size(); ++c)
-            {
-                std::memcpy(out.data() + offset, GetRawCell(r, c), mColumns[c].stride);
-                offset += mColumns[c].stride;
-            }
-        }
-        return out;
-    }
+    std::vector<uint8_t> Dump() const;
 
-    size_t GetRowCount() const { return mRowCount; }
-    size_t GetColumnCount() const { return mColumns.size(); }
-    size_t GetColumnStride(size_t col) const { return mColumns[col].stride; }
+    size_t GetRowCount() const;
+    size_t GetColumnCount() const;
+    size_t GetColumnStride(size_t col) const;
 
     /// <summary>
     /// Total bytes per row (sum of all column strides).
     /// </summary>
     /// <returns></returns>
-    size_t GetRowStride() const
-    {
-        size_t stride = 0;
-        for (auto& col : mColumns) stride += col.stride;
-        return stride;
-    }
+    size_t GetRowStride() const;
+    void ConvertToSchema(const StoreSchema& newSchema);
 
 private:
-    std::vector<ColumnMeta> mColumns;
+    std::vector<ColumnSchema> mColumns;
     std::vector<std::vector<uint8_t>> mColumnsData; // column-major storage
     size_t mRowCount{ 0 };
 
@@ -209,10 +144,7 @@ private:
     /// <param name="row"></param>
     /// <param name="col"></param>
     /// <returns></returns>
-    uint8_t* GetRawCellMutable(size_t row, size_t col)
-    {
-        return mColumnsData[col].data() + row * mColumns[col].stride;
-    }
+    uint8_t* GetRawCellMutable(size_t row, size_t col);
 
     /// <summary>
     /// Get a pointer to a raw cell (unchecked).
@@ -220,38 +152,11 @@ private:
     /// <param name="row"></param>
     /// <param name="col"></param>
     /// <returns></returns>
-    const uint8_t* GetRawCell(size_t row, size_t col) const
-    {
-        return mColumnsData[col].data() + row * mColumns[col].stride;
-    }
+    const uint8_t* GetRawCell(size_t row, size_t col) const;
 
-    void InitializeColumns(size_t rows)
-    {
-        mRowCount = rows;
-        mColumnsData.resize(mColumns.size());
-        for (size_t c = 0; c < mColumns.size(); ++c)
-            mColumnsData[c].resize(mColumns[c].stride * rows);
-    }
+    void InitializeColumns(size_t rows);
 
-    void LoadDataFromRowMajor(const std::vector<uint8_t>& src, size_t rows)
-    {
-        size_t rowStride = GetRowStride();
-        for (size_t r = 0; r < rows; ++r)
-        {
-            size_t srcOffset = r * rowStride;
-            size_t dstOffset = 0;
-            for (size_t c = 0; c < mColumns.size(); ++c)
-            {
-                std::memcpy(mColumnsData[c].data() + r * mColumns[c].stride,
-                    src.data() + srcOffset + dstOffset,
-                    mColumns[c].stride);
-                dstOffset += mColumns[c].stride;
-            }
-        }
-    }
+    void LoadDataFromRowMajor(const std::vector<uint8_t>& src, size_t rows);
 
-    bool IsValid(size_t row, size_t col) const
-    {
-        return row < mRowCount && col < mColumns.size();
-    }
+    bool IsValid(size_t row, size_t col) const;
 };

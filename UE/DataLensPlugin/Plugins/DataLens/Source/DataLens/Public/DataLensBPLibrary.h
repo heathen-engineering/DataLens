@@ -161,10 +161,10 @@ public:
 
             try
             {
-                std::vector<DataStore::ColumnMeta> Cols = {
-                    { sizeof(float) },
-                    { sizeof(int32) },
-                    { sizeof(double) }
+                std::vector<ColumnSchema> Cols = {
+                { "ColumnFloat",  ColumnSchema::Type::Float },
+                { "ColumnInt32",  ColumnSchema::Type::Int32 },
+                { "ColumnDouble", ColumnSchema::Type::Double }
                 };
 
                 {
@@ -178,7 +178,7 @@ public:
                     Result.Rows = Store.GetRowCount();
                     Result.Columns = Store.GetColumnCount();
                     Result.RowSpanBytes = 0;
-                    for (auto& Col : Cols) Result.RowSpanBytes += Col.stride;
+                    for (auto& Col : Cols) Result.RowSpanBytes += Col.GetStride();
                     Result.TotalMemoryBytes = Result.RowSpanBytes * Result.Rows;
 
                     Notes = FString::Printf(TEXT("Created store with %lld rows, %d columns."), Result.Rows, (int)Result.Columns);
@@ -220,15 +220,15 @@ public:
             try
             {
                 // Define column metadata
-                std::vector<DataStore::ColumnMeta> Cols = {
-                    { sizeof(float) },
-                    { sizeof(int32) },
-                    { sizeof(double) }
+                std::vector<ColumnSchema> Cols = {
+                { "ColumnFloat",  ColumnSchema::Type::Float },
+                { "ColumnInt32",  ColumnSchema::Type::Int32 },
+                { "ColumnDouble", ColumnSchema::Type::Double }
                 };
 
                 // Pre-build raw row-major data
                 size_t rowStride = 0;
-                for (auto& Col : Cols) rowStride += Col.stride;
+                for (auto& Col : Cols) rowStride += Col.GetStride();
                 std::vector<uint8_t> Data(rowStride * RowCount, 0); // zero-filled data
 
                 {
@@ -242,7 +242,7 @@ public:
                     Result.Rows = Store.GetRowCount();
                     Result.Columns = Store.GetColumnCount();
                     Result.RowSpanBytes = 0;
-                    for (auto& Col : Cols) Result.RowSpanBytes += Col.stride;
+                    for (auto& Col : Cols) Result.RowSpanBytes += Col.GetStride();
                     Result.TotalMemoryBytes = Result.RowSpanBytes * Result.Rows;
 
                     Notes = FString::Printf(TEXT("Created store with %lld rows, %d columns, loaded with pre-generated data."), Result.Rows, (int)Result.Columns);
@@ -283,15 +283,15 @@ public:
             try
             {
                 // Define column metadata
-                std::vector<DataStore::ColumnMeta> Cols = {
-                    { sizeof(float) },
-                    { sizeof(int32) },
-                    { sizeof(double) }
+                std::vector<ColumnSchema> Cols = {
+                { "ColumnFloat",  ColumnSchema::Type::Float },
+                { "ColumnInt32",  ColumnSchema::Type::Int32 },
+                { "ColumnDouble", ColumnSchema::Type::Double }
                 };
 
                 // Pre-build raw row-major data
                 size_t rowStride = 0;
-                for (auto& Col : Cols) rowStride += Col.stride;
+                for (auto& Col : Cols) rowStride += Col.GetStride();
                 std::vector<uint8_t> Data(rowStride * RowCount, 0); // zero-filled data
 
                 // Calculate 20% extra rows for padding
@@ -307,7 +307,7 @@ public:
                     Result.Rows = Store.GetRowCount();
                     Result.Columns = Store.GetColumnCount();
                     Result.RowSpanBytes = 0;
-                    for (auto& Col : Cols) Result.RowSpanBytes += Col.stride;
+                    for (auto& Col : Cols) Result.RowSpanBytes += Col.GetStride();
                     Result.TotalMemoryBytes = Result.RowSpanBytes * Result.Rows;
 
                     Notes = FString::Printf(TEXT("Created store with %lld loaded rows + %lld extra padded rows, %d columns, pre-generated data."),
@@ -341,14 +341,14 @@ public:
         for (int64 RowCount : StoreSizes)
         {
             // Create predictable data
-            std::vector<DataStore::ColumnMeta> Cols = {
-                { sizeof(float) },
-                { sizeof(int32) },
-                { sizeof(double) }
+            std::vector<ColumnSchema> Cols = {
+                { "ColumnFloat",  ColumnSchema::Type::Float },
+                { "ColumnInt32",  ColumnSchema::Type::Int32 },
+                { "ColumnDouble", ColumnSchema::Type::Double }
             };
             size_t ColCount = Cols.size();
             size_t RowStride = 0;
-            for (auto& C : Cols) RowStride += C.stride;
+            for (auto& C : Cols) RowStride += C.GetStride();
 
             std::vector<uint8_t> Data(RowStride * RowCount, 0);
             for (int64 r = 0; r < RowCount; ++r)
@@ -452,14 +452,14 @@ public:
         for (int64 RowCount : StoreSizes)
         {
             // Prepare predictable data
-            std::vector<DataStore::ColumnMeta> Cols = {
-                { sizeof(float) },
-                { sizeof(int32) },
-                { sizeof(double) }
+            std::vector<ColumnSchema> Cols = {
+                { "ColumnFloat",  ColumnSchema::Type::Float },
+                { "ColumnInt32",  ColumnSchema::Type::Int32 },
+                { "ColumnDouble", ColumnSchema::Type::Double }
             };
             size_t ColCount = Cols.size();
             size_t RowStride = 0;
-            for (auto& C : Cols) RowStride += C.stride;
+            for (auto& C : Cols) RowStride += C.GetStride();
 
             std::vector<uint8_t> Data(RowStride * RowCount, 0);
             for (int64 r = 0; r < RowCount; ++r)
@@ -562,14 +562,14 @@ public:
 
         for (int64 RowCount : StoreSizes)
         {
-            std::vector<DataStore::ColumnMeta> Cols = {
-                { sizeof(float) },
-                { sizeof(int32) },
-                { sizeof(double) }
+            std::vector<ColumnSchema> Cols = {
+                { "ColumnFloat",  ColumnSchema::Type::Float },
+                { "ColumnInt32",  ColumnSchema::Type::Int32 },
+                { "ColumnDouble", ColumnSchema::Type::Double }
             };
             size_t ColCount = Cols.size();
             size_t RowStride = 0;
-            for (auto& C : Cols) RowStride += C.stride;
+            for (auto& C : Cols) RowStride += C.GetStride();
 
             // Fill store with zeros initially
             std::vector<uint8_t> Data(RowStride * RowCount, 0);
@@ -663,14 +663,14 @@ public:
 
         for (int64 RowCount : StoreSizes)
         {
-            std::vector<DataStore::ColumnMeta> Cols = {
-                { sizeof(float) },
-                { sizeof(int32) },
-                { sizeof(double) }
+            std::vector<ColumnSchema> Cols = {
+                { "ColumnFloat",  ColumnSchema::Type::Float },
+                { "ColumnInt32",  ColumnSchema::Type::Int32 },
+                { "ColumnDouble", ColumnSchema::Type::Double }
             };
             size_t ColCount = Cols.size();
             size_t RowStride = 0;
-            for (auto& C : Cols) RowStride += C.stride;
+            for (auto& C : Cols) RowStride += C.GetStride();
 
             // Fill store with zeros initially
             std::vector<uint8_t> Data(RowStride * RowCount, 0);
@@ -767,7 +767,11 @@ public:
         FString Notes;
 
         // Create a tiny table with 1 row and 3 columns
-        std::vector<DataStore::ColumnMeta> Cols = { { sizeof(float) }, { sizeof(int32) }, { sizeof(double) } };
+        std::vector<ColumnSchema> Cols = {
+                { "ColumnFloat",  ColumnSchema::Type::Float },
+                { "ColumnInt32",  ColumnSchema::Type::Int32 },
+                { "ColumnDouble", ColumnSchema::Type::Double }
+        };
 
         try
         {
@@ -802,7 +806,7 @@ public:
         Result.Rows = 1;
         Result.Columns = 3;
         Result.RowSpanBytes = 0;
-        for (auto& C : Cols) Result.RowSpanBytes += C.stride;
+        for (auto& C : Cols) Result.RowSpanBytes += C.GetStride();
         Result.TotalMemoryBytes = Result.RowSpanBytes * Result.Rows;
         Result.DurationMs = 0.0;
 
@@ -820,7 +824,11 @@ public:
         FString Notes;
 
         // Create a tiny table with 1 row and 3 columns
-        std::vector<DataStore::ColumnMeta> Cols = { { sizeof(float) }, { sizeof(int32) }, { sizeof(double) } };
+        std::vector<ColumnSchema> Cols = {
+                { "ColumnFloat",  ColumnSchema::Type::Float },
+                { "ColumnInt32",  ColumnSchema::Type::Int32 },
+                { "ColumnDouble", ColumnSchema::Type::Double }
+        };
 
         try
         {
@@ -849,7 +857,7 @@ public:
         Result.RowSpanBytes = 0;
 
         for (auto& C : Cols) 
-            Result.RowSpanBytes += C.stride;
+            Result.RowSpanBytes += C.GetStride();
         
         Result.TotalMemoryBytes = Result.RowSpanBytes * Result.Rows;
         Result.DurationMs = 0.0;
@@ -871,9 +879,13 @@ public:
             bool bSuccess = true;
             FString Notes;
 
-            std::vector<DataStore::ColumnMeta> Cols = { { sizeof(float) }, { sizeof(int32) }, { sizeof(double) } };
+            std::vector<ColumnSchema> Cols = {
+                { "ColumnFloat",  ColumnSchema::Type::Float },
+                { "ColumnInt32",  ColumnSchema::Type::Int32 },
+                { "ColumnDouble", ColumnSchema::Type::Double }
+            };
             size_t RowSpan = 0;
-            for (auto& C : Cols) RowSpan += C.stride;
+            for (auto& C : Cols) RowSpan += C.GetStride();
 
             try
             {
