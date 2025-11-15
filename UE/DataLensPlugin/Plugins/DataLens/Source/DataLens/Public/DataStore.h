@@ -3,11 +3,8 @@
  *
  * © 2025 Heathen Engineering. All rights reserved.
  *
- * High-performance, column-oriented in-memory data table with dynamic
- * per-column stride. Supports both raw and safe access to table cells.
- *
  * Author: James McGhee
- * Date:   2025-11-04 - 2025-11-14
+ * Date:   2025-11-04 - 2025-11-15
  ******************************************************************************/
 
 #pragma once
@@ -133,6 +130,11 @@ public:
     size_t GetRowStride() const;
     void ConvertToSchema(const StoreSchema& newSchema);
 
+    bool CompareCells(size_t rowA, size_t columnA, const DataStore& other, size_t rowB, size_t columnB) const;
+    void CopyCellToFlatRow(size_t rowIndex, size_t columnIndex, void* dst) const;
+    bool MatchesPredicate(size_t rowIndex, const QueryPredicate& pred) const;
+
+
 private:
     std::vector<ColumnSchema> mColumns;
     std::vector<std::vector<uint8_t>> mColumnsData; // column-major storage
@@ -159,4 +161,7 @@ private:
     void LoadDataFromRowMajor(const std::vector<uint8_t>& src, size_t rows);
 
     bool IsValid(size_t row, size_t col) const;
+
+    const void* GetCellPointer(size_t rowIndex, size_t columnIndex) const;
+    
 };

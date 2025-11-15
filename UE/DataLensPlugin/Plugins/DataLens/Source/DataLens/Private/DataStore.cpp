@@ -1,13 +1,10 @@
 /******************************************************************************
- * DataStore.h
+ * DataStore.cpp
  *
  * © 2025 Heathen Engineering. All rights reserved.
  *
- * High-performance, column-oriented in-memory data table with dynamic
- * per-column stride. Supports both raw and safe access to table cells.
- *
  * Author: James McGhee
- * Date:   2025-11-04 - 2025-11-14
+ * Date:   2025-11-04 - 2025-11-15
  ******************************************************************************/
 
 #include "DataStore.h"
@@ -138,7 +135,7 @@ void DataStore::ConvertToSchema(const StoreSchema& newSchema)
                 const uint8_t* src = oldData.data() + row * oldStride;
                 uint8_t* dst = newColData.data() + row * newStride;
 
-                ColumnSchema::ConvertCell(src, it->DataType, dst, newCol.DataType);
+                ColumnSchema::ConvertCell(src, it->Type, dst, newCol.Type);
             }
         }
         else if (!newCol.DefaultValue.empty())
@@ -160,6 +157,113 @@ void DataStore::ConvertToSchema(const StoreSchema& newSchema)
 
     mColumns = newSchema.Columns;
     mColumnsData = std::move(newColumnsData);
+}
+
+bool DataStore::CompareCells(size_t rowA, size_t columnA, const DataStore& other, size_t rowB, size_t columnB) const
+{
+    if (columnA >= mColumns.size() || columnB >= other.mColumns.size())
+        throw std::out_of_range("Column index out of range");
+
+    const ColumnSchema& colA = mColumns[columnA];
+    const ColumnSchema& colB = other.mColumns[columnB];
+
+    uint8_t bufferA[16]; // max GUID
+    uint8_t bufferB[16];
+
+    const void* srcA = GetCellPointer(rowA, columnA);
+    const void* srcB = other.GetCellPointer(rowB, columnB);
+
+    ColumnSchema::ConvertCell(srcA, colA.Type, bufferA, colA.Type);
+    ColumnSchema::ConvertCell(srcB, colB.Type, bufferB, colA.Type);
+
+    return std::memcmp(bufferA, bufferB, colA.GetStride()) == 0;
+}
+
+void DataStore::CopyCellToFlatRow(size_t rowIndex, size_t columnIndex, void* dst) const
+{
+    if (columnIndex >= mColumns.size())
+        throw std::out_of_range("Column index out of range");
+
+    const ColumnSchema& col = mColumns[columnIndex];
+    const void* src = GetCellPointer(rowIndex, columnIndex);
+
+    ColumnSchema::ConvertCell(src, col.Type, dst, col.Type);
+}
+
+bool DataStore::MatchesPredicate(size_t rowIndex, const QueryPredicate& pred) const
+{
+    if (rowIndex >= mRowCount || pred.ColumnIndex >= mColumns.size())
+        throw std::out_of_range("Row or column index out of range");
+
+    const ColumnSchema& col = mColumns[pred.ColumnIndex];
+
+    // Allocate temporary storage for conversion
+    uint8_t buffer[16]; // max size for GUID
+
+    const void* src = GetRawCell(rowIndex, pred.ColumnIndex);
+
+    // Convert cell to the type of the predicate
+    ColumnSchema::ConvertCell(src, col.Type, buffer, pred.ColumnType);
+
+    switch (pred.ColumnType)
+    {
+    case DataType::Bool:
+    case DataType::Int8:
+    case DataType::Int16:
+    case DataType::Int32:
+    case DataType::Int64:
+    case DataType::UInt8:
+    case DataType::UInt16:
+    case DataType::UInt32:
+    case DataType::UInt64:
+    {
+        int64_t cellValue = 0;
+        std::memcpy(&cellValue, buffer, sizeof(cellValue));
+
+        switch (pred.Op)
+        {
+        case QueryOperator::Equals:         return cellValue == pred.IntValue;
+        case QueryOperator::NotEquals:      return cellValue != pred.IntValue;
+        case QueryOperator::Less:           return cellValue < pred.IntValue;
+        case QueryOperator::LessOrEqual:    return cellValue <= pred.IntValue;
+        case QueryOperator::Greater:        return cellValue > pred.IntValue;
+        case QueryOperator::GreaterOrEqual: return cellValue >= pred.IntValue;
+        case QueryOperator::Range:          return cellValue >= pred.IntValue && cellValue <= pred.IntValueHigh;
+        default: throw std::logic_error("Unsupported operator for integer type");
+        }
+    }
+
+    case DataType::Float:
+    case DataType::Double:
+    {
+        double cellValue = 0.0;
+        std::memcpy(&cellValue, buffer, sizeof(cellValue));
+
+        switch (pred.Op)
+        {
+        case QueryOperator::Equals:         return cellValue == pred.DoubleValue;
+        case QueryOperator::NotEquals:      return cellValue != pred.DoubleValue;
+        case QueryOperator::Less:           return cellValue < pred.DoubleValue;
+        case QueryOperator::LessOrEqual:    return cellValue <= pred.DoubleValue;
+        case QueryOperator::Greater:        return cellValue > pred.DoubleValue;
+        case QueryOperator::GreaterOrEqual: return cellValue >= pred.DoubleValue;
+        case QueryOperator::Range:          return cellValue >= pred.DoubleValue && cellValue <= pred.DoubleValueHigh;
+        default: throw std::logic_error("Unsupported operator for floating type");
+        }
+    }
+
+    case DataType::GUID:
+    {
+        if (pred.Op != QueryOperator::Equals && pred.Op != QueryOperator::NotEquals)
+            throw std::logic_error("GUID supports only Equals/NotEquals");
+
+        bool equal = std::memcmp(buffer, &pred.UIntValue, 16) == 0;
+        return pred.Op == QueryOperator::Equals ? equal : !equal;
+    }
+
+    default:
+        throw std::logic_error("Unsupported DataType in predicate evaluation");
+    }
 }
 
 /// <summary>
@@ -212,4 +316,14 @@ void DataStore::LoadDataFromRowMajor(const std::vector<uint8_t>& src, size_t row
 bool DataStore::IsValid(size_t row, size_t col) const
 {
     return row < mRowCount && col < mColumns.size();
+}
+
+const void* DataStore::GetCellPointer(size_t rowIndex, size_t columnIndex) const
+{
+    if (columnIndex >= mColumnsData.size() || rowIndex >= mRowCount)
+        throw std::out_of_range("Invalid row or column index");
+
+    const ColumnSchema& col = mColumns[columnIndex];
+    size_t stride = col.GetStride();
+    return mColumnsData[columnIndex].data() + rowIndex * stride;
 }
