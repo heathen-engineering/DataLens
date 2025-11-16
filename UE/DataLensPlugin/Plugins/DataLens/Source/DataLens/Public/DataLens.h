@@ -33,6 +33,12 @@ public:
 	/// </summary>
 	/// <param name="data">This should be an uncompressed raw byte array, same as you would have gotten from Serialize</param>
 	void Deserialize(const std::vector<uint8_t>& data);
+
+	/************************************************************
+	 *
+	 * Data Store Features
+	 *
+	 ************************************************************/
 	/// <summary>
 	/// Get the index of the store matching this name.
 	/// You should cash this index to avoid future string lookups
@@ -40,6 +46,35 @@ public:
 	/// <param name="name">The case sensitive name of the store you wish to find</param>
 	/// <returns>The index of the matching store if any, if none this will return SIZE_MAX</returns>
 	size_t FindStore(const std::string& name) const;
+	size_t GetStoreRowCount(size_t id);
+	
+	/************************************************************
+	 * 
+	 * Data View Features
+	 * 
+	 ************************************************************/
+
+	bool HasView(const std::string& name);
+	bool IsViewValid(size_t id);
+	size_t FindOrCreateView(const std::string& name);
+	void RemoveView(size_t id);
+	void SetViewSelect(size_t id, const std::string sql);
+	void SetViewUpdate(size_t id, const std::string sql);
+	void SetViewFrequency(size_t id, uint8_t frequency);
+	void SetViewCanInsert(size_t id, bool canInsert);
+	void SetViewCanUpdate(size_t id, bool canUpdate);
+	std::vector<DataViewColumnSchema> GetViewSchema(size_t id) const;
+	bool GetViewRow(size_t view, size_t row, uint8_t* buffer) const;
+	bool SetViewRow(size_t view, size_t row, const uint8_t* data);
+	size_t AddViewRow(size_t view, const uint8_t* data);
+	bool RemoveViewRow(size_t view, size_t row);
+	void RefreshView(size_t id);
+	void FlushView(size_t id);
+
+private:
+	DataLensSchema mSchema; 
+	std::vector<DataStore> mStores;
+	
 	/// <summary>
 	/// Creates a new QueryObject based on the sql like expression provided
 	/// </summary>
@@ -47,21 +82,25 @@ public:
 	/// <returns>A compiled and ready to run query</returns>
 	DataQueryObject GetQuery(const std::string& sql) const;
 	/// <summary>
+	/// Creates a new UpdateObject based on the sql like expression provided
+	/// </summary>
+	/// <param name="sql">A TSQL like expression defining the query you wish to run</param>
+	/// <returns>A compiled and ready to run update</returns>
+	DataUpdateObject GetUpdate(const std::string sql) const;
+
+	/// <summary>
 	/// Run a prepared query object and return the raw row major results.
 	/// </summary>
 	/// <param name="query">The query to run, this must be a pre-prepared query</param>
 	/// <returns>The row major results as a byte array, it is up to the consumer to translate the bytes to the expected column order</returns>
 	std::vector<uint8_t> RunQuery(const DataQueryObject& query);
-	// Update
-	// CommitAll
-	// Commit
-private:
-	DataLensSchema mSchema; 
-	std::vector<DataStore> mStores;
-	// storage for our pending update commands
-	// storage for our registered views
-	// CommitViews
-	// RefreshViews
+	/// <summary>
+	/// 
+	/// </summary>
+	/// <param name="update"></param>
+	/// <returns></returns>
+	std::vector<DataCommandValue> RunUpdate(const DataUpdateObject& update);
+
 	void ApplySort(std::vector<uint8_t>& results, const DataQueryObject& query);
 	void ApplyLimitOffset(std::vector<uint8_t>& results, const DataQueryObject& query);
 	size_t GetRowStride(const DataQueryObject& query);

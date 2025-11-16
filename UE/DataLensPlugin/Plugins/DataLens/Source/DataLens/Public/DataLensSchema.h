@@ -285,6 +285,14 @@ struct DataViewSchema
 
 struct DataViewRegistry
 {
+    enum class RowState : uint8_t
+    {
+        Unchanged = 0,
+        Modified = 1,
+        New = 2,
+        Removed = 3
+    };
+
     /// <summary>
     /// Defines the query, update and column layout of the view
     /// </summary>
@@ -319,7 +327,7 @@ struct DataViewRegistry
         /// index 0 of the inner collection indicates Row Delete flag, if true the row is to be fully removed
         /// if false the system should check each flag as columnIndex+1 indicating if that column in that row has been updated
         /// </summary>
-        std::vector<std::vector<bool>> DirtyRows;
+        std::vector<std::vector<RowState>> DirtyRows;
     } Cache;
 };
 
