@@ -19,7 +19,7 @@ public:
 	/// Creates a new DataLens system with the indicated schema
 	/// </summary>
 	/// <param name="schema"></param>
-	explicit DataLens(const Schema& schema);
+	explicit DataLens(const DataLensSchema& schema);
 	/// <summary>
 	/// Serialize the schema and stores to a byte array.
 	/// This is useful for writing to disk as a save file.
@@ -45,26 +45,26 @@ public:
 	/// </summary>
 	/// <param name="sql">A TSQL like expression defining the query you wish to run</param>
 	/// <returns>A compiled and ready to run query</returns>
-	QueryObject GetQuery(const std::string& sql) const;
+	DataQueryObject GetQuery(const std::string& sql) const;
 	/// <summary>
 	/// Run a prepared query object and return the raw row major results.
 	/// </summary>
 	/// <param name="query">The query to run, this must be a pre-prepared query</param>
 	/// <returns>The row major results as a byte array, it is up to the consumer to translate the bytes to the expected column order</returns>
-	std::vector<uint8_t> RunQuery(const QueryObject& query);
+	std::vector<uint8_t> RunQuery(const DataQueryObject& query);
 	// Update
 	// CommitAll
 	// Commit
 private:
-	Schema mSchema; 
+	DataLensSchema mSchema; 
 	std::vector<DataStore> mStores;
 	// storage for our pending update commands
 	// storage for our registered views
 	// CommitViews
 	// RefreshViews
-	void ApplySort(std::vector<uint8_t>& results, const QueryObject& query);
-	void ApplyLimitOffset(std::vector<uint8_t>& results, const QueryObject& query);
-	size_t GetRowStride(const QueryObject& query);
+	void ApplySort(std::vector<uint8_t>& results, const DataQueryObject& query);
+	void ApplyLimitOffset(std::vector<uint8_t>& results, const DataQueryObject& query);
+	size_t GetRowStride(const DataQueryObject& query);
 	static void WriteString(std::vector<uint8_t>& out, const std::string& str);
 	static std::string ReadString(const uint8_t* data, size_t& offset, size_t dataSize);
 };

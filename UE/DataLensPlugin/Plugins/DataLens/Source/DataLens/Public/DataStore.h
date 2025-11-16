@@ -27,14 +27,14 @@ public:
     /// </summary>
     /// <param name="columns"></param>
     /// <param name="preallocRows"></param>
-    DataStore(const std::vector<ColumnSchema>& columns, size_t preallocRows);
+    DataStore(const std::vector<DataStoreColumnSchema>& columns, size_t preallocRows);
 
     /// <summary>
     /// Initialize with column metadata and pre-load data from a byte array (row-major layout).
     /// </summary>
     /// <param name="columns"></param>
     /// <param name="data"></param>
-    DataStore(const std::vector<ColumnSchema>& columns, const std::vector<uint8_t>& data);
+    DataStore(const std::vector<DataStoreColumnSchema>& columns, const std::vector<uint8_t>& data);
 
     /// <summary>
     /// Initialize with column metadata, pre-load data, and optionally preallocate extra rows.
@@ -42,7 +42,7 @@ public:
     /// <param name="columns"></param>
     /// <param name="data"></param>
     /// <param name="extraRows"></param>
-    DataStore(const std::vector<ColumnSchema>& columns, const std::vector<uint8_t>& data, size_t extraRows);
+    DataStore(const std::vector<DataStoreColumnSchema>& columns, const std::vector<uint8_t>& data, size_t extraRows);
 
     /// <summary>
     /// Get a typed value from a cell (unchecked).
@@ -128,15 +128,15 @@ public:
     /// </summary>
     /// <returns></returns>
     size_t GetRowStride() const;
-    void ConvertToSchema(const StoreSchema& newSchema);
+    void ConvertToSchema(const DataStoreSchema& newSchema);
 
     bool CompareCells(size_t rowA, size_t columnA, const DataStore& other, size_t rowB, size_t columnB) const;
     void CopyCellToFlatRow(size_t rowIndex, size_t columnIndex, void* dst) const;
-    bool MatchesPredicate(size_t rowIndex, const QueryPredicate& pred) const;
+    bool MatchesPredicate(size_t rowIndex, const DataQueryPredicate& pred) const;
 
 
 private:
-    std::vector<ColumnSchema> mColumns;
+    std::vector<DataStoreColumnSchema> mColumns;
     std::vector<std::vector<uint8_t>> mColumnsData; // column-major storage
     size_t mRowCount{ 0 };
 

@@ -170,10 +170,10 @@ public:
 
             try
             {
-                std::vector<ColumnSchema> Cols = {
-                { "ColumnFloat",  ColumnSchema::Type::Float },
-                { "ColumnInt32",  ColumnSchema::Type::Int32 },
-                { "ColumnDouble", ColumnSchema::Type::Double }
+                std::vector<DataStoreColumnSchema> Cols = {
+                { "ColumnFloat",  DataStoreColumnSchema::Type::Float },
+                { "ColumnInt32",  DataStoreColumnSchema::Type::Int32 },
+                { "ColumnDouble", DataStoreColumnSchema::Type::Double }
                 };
 
                 {
@@ -229,10 +229,10 @@ public:
             try
             {
                 // Define column metadata
-                std::vector<ColumnSchema> Cols = {
-                { "ColumnFloat",  ColumnSchema::Type::Float },
-                { "ColumnInt32",  ColumnSchema::Type::Int32 },
-                { "ColumnDouble", ColumnSchema::Type::Double }
+                std::vector<DataStoreColumnSchema> Cols = {
+                { "ColumnFloat",  DataStoreColumnSchema::Type::Float },
+                { "ColumnInt32",  DataStoreColumnSchema::Type::Int32 },
+                { "ColumnDouble", DataStoreColumnSchema::Type::Double }
                 };
 
                 // Pre-build raw row-major data
@@ -292,10 +292,10 @@ public:
             try
             {
                 // Define column metadata
-                std::vector<ColumnSchema> Cols = {
-                { "ColumnFloat",  ColumnSchema::Type::Float },
-                { "ColumnInt32",  ColumnSchema::Type::Int32 },
-                { "ColumnDouble", ColumnSchema::Type::Double }
+                std::vector<DataStoreColumnSchema> Cols = {
+                { "ColumnFloat",  DataStoreColumnSchema::Type::Float },
+                { "ColumnInt32",  DataStoreColumnSchema::Type::Int32 },
+                { "ColumnDouble", DataStoreColumnSchema::Type::Double }
                 };
 
                 // Pre-build raw row-major data
@@ -350,10 +350,10 @@ public:
         for (int64 RowCount : StoreSizes)
         {
             // Create predictable data
-            std::vector<ColumnSchema> Cols = {
-                { "ColumnFloat",  ColumnSchema::Type::Float },
-                { "ColumnInt32",  ColumnSchema::Type::Int32 },
-                { "ColumnDouble", ColumnSchema::Type::Double }
+            std::vector<DataStoreColumnSchema> Cols = {
+                { "ColumnFloat",  DataStoreColumnSchema::Type::Float },
+                { "ColumnInt32",  DataStoreColumnSchema::Type::Int32 },
+                { "ColumnDouble", DataStoreColumnSchema::Type::Double }
             };
             size_t ColCount = Cols.size();
             size_t RowStride = 0;
@@ -461,10 +461,10 @@ public:
         for (int64 RowCount : StoreSizes)
         {
             // Prepare predictable data
-            std::vector<ColumnSchema> Cols = {
-                { "ColumnFloat",  ColumnSchema::Type::Float },
-                { "ColumnInt32",  ColumnSchema::Type::Int32 },
-                { "ColumnDouble", ColumnSchema::Type::Double }
+            std::vector<DataStoreColumnSchema> Cols = {
+                { "ColumnFloat",  DataStoreColumnSchema::Type::Float },
+                { "ColumnInt32",  DataStoreColumnSchema::Type::Int32 },
+                { "ColumnDouble", DataStoreColumnSchema::Type::Double }
             };
             size_t ColCount = Cols.size();
             size_t RowStride = 0;
@@ -571,10 +571,10 @@ public:
 
         for (int64 RowCount : StoreSizes)
         {
-            std::vector<ColumnSchema> Cols = {
-                { "ColumnFloat",  ColumnSchema::Type::Float },
-                { "ColumnInt32",  ColumnSchema::Type::Int32 },
-                { "ColumnDouble", ColumnSchema::Type::Double }
+            std::vector<DataStoreColumnSchema> Cols = {
+                { "ColumnFloat",  DataStoreColumnSchema::Type::Float },
+                { "ColumnInt32",  DataStoreColumnSchema::Type::Int32 },
+                { "ColumnDouble", DataStoreColumnSchema::Type::Double }
             };
             size_t ColCount = Cols.size();
             size_t RowStride = 0;
@@ -672,10 +672,10 @@ public:
 
         for (int64 RowCount : StoreSizes)
         {
-            std::vector<ColumnSchema> Cols = {
-                { "ColumnFloat",  ColumnSchema::Type::Float },
-                { "ColumnInt32",  ColumnSchema::Type::Int32 },
-                { "ColumnDouble", ColumnSchema::Type::Double }
+            std::vector<DataStoreColumnSchema> Cols = {
+                { "ColumnFloat",  DataStoreColumnSchema::Type::Float },
+                { "ColumnInt32",  DataStoreColumnSchema::Type::Int32 },
+                { "ColumnDouble", DataStoreColumnSchema::Type::Double }
             };
             size_t ColCount = Cols.size();
             size_t RowStride = 0;
@@ -776,10 +776,10 @@ public:
         FString Notes;
 
         // Create a tiny table with 1 row and 3 columns
-        std::vector<ColumnSchema> Cols = {
-                { "ColumnFloat",  ColumnSchema::Type::Float },
-                { "ColumnInt32",  ColumnSchema::Type::Int32 },
-                { "ColumnDouble", ColumnSchema::Type::Double }
+        std::vector<DataStoreColumnSchema> Cols = {
+                { "ColumnFloat",  DataStoreColumnSchema::Type::Float },
+                { "ColumnInt32",  DataStoreColumnSchema::Type::Int32 },
+                { "ColumnDouble", DataStoreColumnSchema::Type::Double }
         };
 
         try
@@ -833,10 +833,10 @@ public:
         FString Notes;
 
         // Create a tiny table with 1 row and 3 columns
-        std::vector<ColumnSchema> Cols = {
-                { "ColumnFloat",  ColumnSchema::Type::Float },
-                { "ColumnInt32",  ColumnSchema::Type::Int32 },
-                { "ColumnDouble", ColumnSchema::Type::Double }
+        std::vector<DataStoreColumnSchema> Cols = {
+                { "ColumnFloat",  DataStoreColumnSchema::Type::Float },
+                { "ColumnInt32",  DataStoreColumnSchema::Type::Int32 },
+                { "ColumnDouble", DataStoreColumnSchema::Type::Double }
         };
 
         try
@@ -888,10 +888,10 @@ public:
             bool bSuccess = true;
             FString Notes;
 
-            std::vector<ColumnSchema> Cols = {
-                { "ColumnFloat",  ColumnSchema::Type::Float },
-                { "ColumnInt32",  ColumnSchema::Type::Int32 },
-                { "ColumnDouble", ColumnSchema::Type::Double }
+            std::vector<DataStoreColumnSchema> Cols = {
+                { "ColumnFloat",  DataStoreColumnSchema::Type::Float },
+                { "ColumnInt32",  DataStoreColumnSchema::Type::Int32 },
+                { "ColumnDouble", DataStoreColumnSchema::Type::Double }
             };
             size_t RowSpan = 0;
             for (auto& C : Cols) RowSpan += C.GetStride();

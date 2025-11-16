@@ -13,7 +13,7 @@
 #include <sstream>
 #include <algorithm>
 
-inline DataLens::DataLens(const Schema& schema)
+inline DataLens::DataLens(const DataLensSchema& schema)
     : mSchema(schema)
 {
     // Pre-create a DataStore for each store in the schema
@@ -21,7 +21,7 @@ inline DataLens::DataLens(const Schema& schema)
 
     for (size_t i = 0; i < mSchema.Count(); ++i)
     {
-        const StoreSchema& store = mSchema[i];
+        const DataStoreSchema& store = mSchema[i];
 
         size_t prealloc = store.DefaultCapacity;
         if (prealloc == 0)
@@ -42,7 +42,7 @@ std::vector<uint8_t> DataLens::Serialize() const
     // For each store: name, version, columns
     for (size_t i = 0; i < mSchema.Count(); ++i)
     {
-        const StoreSchema& store = mSchema[i];
+        const DataStoreSchema& store = mSchema[i];
         WriteString(out, store.Name);
 
         uint32_t versionLE = DataLensEndian::ToLittle(store.Version);
@@ -51,7 +51,7 @@ std::vector<uint8_t> DataLens::Serialize() const
         uint32_t columnCountLE = DataLensEndian::ToLittle(static_cast<uint32_t>(store.Columns.size()));
         out.insert(out.end(), reinterpret_cast<uint8_t*>(&columnCountLE), reinterpret_cast<uint8_t*>(&columnCountLE) + sizeof(columnCountLE));
 
-        for (const ColumnSchema& col : store.Columns)
+        for (const DataStoreColumnSchema& col : store.Columns)
         {
             WriteString(out, col.Name);
             out.push_back(static_cast<uint8_t>(col.Type));
@@ -95,10 +95,10 @@ void DataLens::Deserialize(const std::vector<uint8_t>& data)
     uint32_t storeCount = DataLensEndian::FromLittle(storeCountLE);
     offset += sizeof(storeCountLE);
 
-    Schema loadedSchema;
+    DataLensSchema loadedSchema;
     for (uint32_t i = 0; i < storeCount; ++i)
     {
-        StoreSchema store;
+        DataStoreSchema store;
         store.Name = ReadString(ptr, offset, dataSize);
 
         if (offset + sizeof(uint32_t) > dataSize) throw std::runtime_error("Invalid payload");
@@ -115,11 +115,11 @@ void DataLens::Deserialize(const std::vector<uint8_t>& data)
 
         for (uint32_t c = 0; c < columnCount; ++c)
         {
-            ColumnSchema col;
+            DataStoreColumnSchema col;
             col.Name = ReadString(ptr, offset, dataSize);
 
             if (offset + 1 > dataSize) throw std::runtime_error("Invalid payload");
-            col.Type = static_cast<DataType>(ptr[offset++]);
+            col.Type = static_cast<DataLensValueType>(ptr[offset++]);
 
             uint8_t hasDefault = ptr[offset++];
             if (hasDefault)
@@ -159,7 +159,7 @@ void DataLens::Deserialize(const std::vector<uint8_t>& data)
         offset += dumpSize;
 
         // Convert the dump to match in-memory schema (type conversions, defaults, missing columns)
-        const StoreSchema& schema = mSchema[i];
+        const DataStoreSchema& schema = mSchema[i];
         DataStore store(schema.Columns, dump);
         store.ConvertToSchema(schema);
         mStores.push_back(std::move(store));
@@ -177,9 +177,9 @@ size_t DataLens::FindStore(const std::string& name) const
     return SIZE_MAX; // not found
 }
 
-QueryObject DataLens::GetQuery(const std::string& sql) const
+DataQueryObject DataLens::GetQuery(const std::string& sql) const
 {
-    QueryObject query;
+    DataQueryObject query;
 
     // 1. Normalize whitespace and lowercase for keywords
     std::string str = sql;
@@ -211,7 +211,7 @@ QueryObject DataLens::GetQuery(const std::string& sql) const
         throw std::runtime_error("Store not found: " + fromPart);
     query.DataStoreIndices.push_back(storeIdx);
 
-    const StoreSchema& storeSchema = mSchema[storeIdx];
+    const DataStoreSchema& storeSchema = mSchema[storeIdx];
 
     // 4. Parse SELECT columns
     if (selectPart == "*" || selectPart == " * ")
@@ -245,7 +245,7 @@ QueryObject DataLens::GetQuery(const std::string& sql) const
 
             // Find column
             auto it = std::find_if(mSchema[colStoreIdx].Columns.begin(), mSchema[colStoreIdx].Columns.end(),
-                [&](const ColumnSchema& col) { return col.Name == columnOnly; });
+                [&](const DataStoreColumnSchema& col) { return col.Name == columnOnly; });
 
             if (it == mSchema[colStoreIdx].Columns.end())
                 throw std::runtime_error("Column not found: " + columnOnly);
@@ -305,15 +305,15 @@ QueryObject DataLens::GetQuery(const std::string& sql) const
             }
 
             auto it = std::find_if(mSchema[colStoreIdx].Columns.begin(), mSchema[colStoreIdx].Columns.end(),
-                [&](const ColumnSchema& col) { return col.Name == columnOnly; });
+                [&](const DataStoreColumnSchema& col) { return col.Name == columnOnly; });
             if (it == mSchema[colStoreIdx].Columns.end())
                 throw std::runtime_error("Column not found: " + columnOnly);
 
             size_t colIdx = std::distance(mSchema[colStoreIdx].Columns.begin(), it);
-            const ColumnSchema& colSchema = mSchema[colStoreIdx].Columns[colIdx];
+            const DataStoreColumnSchema& colSchema = mSchema[colStoreIdx].Columns[colIdx];
 
             // Construct predicate
-            QueryPredicate pred{};
+            DataQueryPredicate pred{};
             pred.StoreIndex = colStoreIdx;
             pred.ColumnIndex = colIdx;
             pred.ColumnType = colSchema.Type;
@@ -321,51 +321,51 @@ QueryObject DataLens::GetQuery(const std::string& sql) const
             // Convert right-hand side to appropriate value
             switch (colSchema.Type)
             {
-            case DataType::Bool:
+            case DataLensValueType::Bool:
                 pred.IntValue = (right == "true" || right == "1") ? 1 : 0;
-                pred.Op = (op == "=") ? QueryOperator::Equals : QueryOperator::NotEquals;
+                pred.Op = (op == "=") ? DataQueryOperator::Equals : DataQueryOperator::NotEquals;
                 break;
-            case DataType::Int8:
-            case DataType::Int16:
-            case DataType::Int32:
-            case DataType::Int64:
+            case DataLensValueType::Int8:
+            case DataLensValueType::Int16:
+            case DataLensValueType::Int32:
+            case DataLensValueType::Int64:
                 pred.IntValue = std::stoll(right);
-                pred.Op = (op == "=") ? QueryOperator::Equals : QueryOperator::Greater;
-                if (op == "!=") pred.Op = QueryOperator::Not;
-                else if (op == ">") pred.Op = QueryOperator::Greater;
-                else if (op == "<") pred.Op = QueryOperator::Less;
-                else if (op == ">=") pred.Op = QueryOperator::GreaterOrEqual;
-                else if (op == "<=") pred.Op = QueryOperator::LessOrEqual;
+                pred.Op = (op == "=") ? DataQueryOperator::Equals : DataQueryOperator::Greater;
+                if (op == "!=") pred.Op = DataQueryOperator::Not;
+                else if (op == ">") pred.Op = DataQueryOperator::Greater;
+                else if (op == "<") pred.Op = DataQueryOperator::Less;
+                else if (op == ">=") pred.Op = DataQueryOperator::GreaterOrEqual;
+                else if (op == "<=") pred.Op = DataQueryOperator::LessOrEqual;
                 break;
-            case DataType::UInt8:
-            case DataType::UInt16:
-            case DataType::UInt32:
-            case DataType::UInt64:
+            case DataLensValueType::UInt8:
+            case DataLensValueType::UInt16:
+            case DataLensValueType::UInt32:
+            case DataLensValueType::UInt64:
                 pred.UIntValue = std::stoull(right);
-                pred.Op = (op == "=") ? QueryOperator::Equals : QueryOperator::Greater;
-                if (op == "!=") pred.Op = QueryOperator::Not;
-                else if (op == ">") pred.Op = QueryOperator::Greater;
-                else if (op == "<") pred.Op = QueryOperator::Less;
-                else if (op == ">=") pred.Op = QueryOperator::GreaterOrEqual;
-                else if (op == "<=") pred.Op = QueryOperator::LessOrEqual;
+                pred.Op = (op == "=") ? DataQueryOperator::Equals : DataQueryOperator::Greater;
+                if (op == "!=") pred.Op = DataQueryOperator::Not;
+                else if (op == ">") pred.Op = DataQueryOperator::Greater;
+                else if (op == "<") pred.Op = DataQueryOperator::Less;
+                else if (op == ">=") pred.Op = DataQueryOperator::GreaterOrEqual;
+                else if (op == "<=") pred.Op = DataQueryOperator::LessOrEqual;
                 break;
-            case DataType::Float:
+            case DataLensValueType::Float:
                 pred.FloatValue = std::stof(right);
-                if (op == "=") pred.Op = QueryOperator::Equals;
-                else if (op == "!=") pred.Op = QueryOperator::Not;
-                else if (op == ">") pred.Op = QueryOperator::Greater;
-                else if (op == "<") pred.Op = QueryOperator::Less;
-                else if (op == ">=") pred.Op = QueryOperator::GreaterOrEqual;
-                else if (op == "<=") pred.Op = QueryOperator::LessOrEqual;
+                if (op == "=") pred.Op = DataQueryOperator::Equals;
+                else if (op == "!=") pred.Op = DataQueryOperator::Not;
+                else if (op == ">") pred.Op = DataQueryOperator::Greater;
+                else if (op == "<") pred.Op = DataQueryOperator::Less;
+                else if (op == ">=") pred.Op = DataQueryOperator::GreaterOrEqual;
+                else if (op == "<=") pred.Op = DataQueryOperator::LessOrEqual;
                 break;
-            case DataType::Double:
+            case DataLensValueType::Double:
                 pred.DoubleValue = std::stod(right);
-                if (op == "=") pred.Op = QueryOperator::Equals;
-                else if (op == "!=") pred.Op = QueryOperator::Not;
-                else if (op == ">") pred.Op = QueryOperator::Greater;
-                else if (op == "<") pred.Op = QueryOperator::Less;
-                else if (op == ">=") pred.Op = QueryOperator::GreaterOrEqual;
-                else if (op == "<=") pred.Op = QueryOperator::LessOrEqual;
+                if (op == "=") pred.Op = DataQueryOperator::Equals;
+                else if (op == "!=") pred.Op = DataQueryOperator::Not;
+                else if (op == ">") pred.Op = DataQueryOperator::Greater;
+                else if (op == "<") pred.Op = DataQueryOperator::Less;
+                else if (op == ">=") pred.Op = DataQueryOperator::GreaterOrEqual;
+                else if (op == "<=") pred.Op = DataQueryOperator::LessOrEqual;
                 break;
             default:
                 throw std::runtime_error("Unsupported data type in predicate parsing");
@@ -378,14 +378,14 @@ QueryObject DataLens::GetQuery(const std::string& sql) const
     return query;
 }
 
-std::vector<uint8_t> DataLens::RunQuery(const QueryObject& query)
+std::vector<uint8_t> DataLens::RunQuery(const DataQueryObject& query)
 {
-    std::vector<QueryResultRow> matchingRows;
+    std::vector<DataQueryResultRow> matchingRows;
 
     // Step 1: Generate candidate rows
     for (size_t rowIndex = 0; rowIndex < mStores[query.DataStoreIndices[0]].GetRowCount(); ++rowIndex)
     {
-        QueryResultRow rowCombo;
+        DataQueryResultRow rowCombo;
         rowCombo.RowIndicesPerStore.resize(query.DataStoreIndices.size());
         rowCombo.RowIndicesPerStore[0] = rowIndex;
 
@@ -477,7 +477,7 @@ std::vector<uint8_t> DataLens::RunQuery(const QueryObject& query)
     return results;
 }
 
-void DataLens::ApplySort(std::vector<uint8_t>& results, const QueryObject& query)
+void DataLens::ApplySort(std::vector<uint8_t>& results, const DataQueryObject& query)
 {
     if (query.SortColumns.empty())
         return;
@@ -502,7 +502,7 @@ void DataLens::ApplySort(std::vector<uint8_t>& results, const QueryObject& query
 
         for (const auto& sortCol : query.SortColumns)
         {
-            const ColumnSchema& colSchema = mSchema[sortCol.StoreIndex].Columns[sortCol.ColumnIndex];
+            const DataStoreColumnSchema& colSchema = mSchema[sortCol.StoreIndex].Columns[sortCol.ColumnIndex];
             size_t stride = colSchema.GetStride();
             const void* valA = rowA + offsetA;
             const void* valB = rowB + offsetB;
@@ -510,18 +510,18 @@ void DataLens::ApplySort(std::vector<uint8_t>& results, const QueryObject& query
             int cmp = 0;
             switch (colSchema.Type)
             {
-            case DataType::Bool:
-            case DataType::UInt8:  cmp = *(uint8_t*)valA - *(uint8_t*)valB; break;
-            case DataType::Int8:   cmp = *(int8_t*)valA - *(int8_t*)valB; break;
-            case DataType::UInt16: cmp = *(uint16_t*)valA - *(uint16_t*)valB; break;
-            case DataType::Int16:  cmp = *(int16_t*)valA - *(int16_t*)valB; break;
-            case DataType::UInt32: cmp = *(uint32_t*)valA > *(uint32_t*)valB ? 1 : (*(uint32_t*)valA < *(uint32_t*)valB ? -1 : 0); break;
-            case DataType::Int32:  cmp = *(int32_t*)valA > *(int32_t*)valB ? 1 : (*(int32_t*)valA < *(int32_t*)valB ? -1 : 0); break;
-            case DataType::UInt64: cmp = *(uint64_t*)valA > *(uint64_t*)valB ? 1 : (*(uint64_t*)valA < *(uint64_t*)valB ? -1 : 0); break;
-            case DataType::Int64:  cmp = *(int64_t*)valA > *(int64_t*)valB ? 1 : (*(int64_t*)valA < *(int64_t*)valB ? -1 : 0); break;
-            case DataType::Float:  cmp = *(float*)valA > *(float*)valB ? 1 : (*(float*)valA < *(float*)valB ? -1 : 0); break;
-            case DataType::Double: cmp = *(double*)valA > *(double*)valB ? 1 : (*(double*)valA < *(double*)valB ? -1 : 0); break;
-            case DataType::GUID:   cmp = std::memcmp(valA, valB, 16); break;
+            case DataLensValueType::Bool:
+            case DataLensValueType::UInt8:  cmp = *(uint8_t*)valA - *(uint8_t*)valB; break;
+            case DataLensValueType::Int8:   cmp = *(int8_t*)valA - *(int8_t*)valB; break;
+            case DataLensValueType::UInt16: cmp = *(uint16_t*)valA - *(uint16_t*)valB; break;
+            case DataLensValueType::Int16:  cmp = *(int16_t*)valA - *(int16_t*)valB; break;
+            case DataLensValueType::UInt32: cmp = *(uint32_t*)valA > *(uint32_t*)valB ? 1 : (*(uint32_t*)valA < *(uint32_t*)valB ? -1 : 0); break;
+            case DataLensValueType::Int32:  cmp = *(int32_t*)valA > *(int32_t*)valB ? 1 : (*(int32_t*)valA < *(int32_t*)valB ? -1 : 0); break;
+            case DataLensValueType::UInt64: cmp = *(uint64_t*)valA > *(uint64_t*)valB ? 1 : (*(uint64_t*)valA < *(uint64_t*)valB ? -1 : 0); break;
+            case DataLensValueType::Int64:  cmp = *(int64_t*)valA > *(int64_t*)valB ? 1 : (*(int64_t*)valA < *(int64_t*)valB ? -1 : 0); break;
+            case DataLensValueType::Float:  cmp = *(float*)valA > *(float*)valB ? 1 : (*(float*)valA < *(float*)valB ? -1 : 0); break;
+            case DataLensValueType::Double: cmp = *(double*)valA > *(double*)valB ? 1 : (*(double*)valA < *(double*)valB ? -1 : 0); break;
+            case DataLensValueType::GUID:   cmp = std::memcmp(valA, valB, 16); break;
             default: throw std::runtime_error("Unsupported column type in sort");
             }
 
@@ -546,7 +546,7 @@ void DataLens::ApplySort(std::vector<uint8_t>& results, const QueryObject& query
     results.swap(sortedResults);
 }
 
-void DataLens::ApplyLimitOffset(std::vector<uint8_t>& results, const QueryObject& query)
+void DataLens::ApplyLimitOffset(std::vector<uint8_t>& results, const DataQueryObject& query)
 {
     size_t rowStride = GetRowStride(query);
     size_t totalRows = results.size() / rowStride;
@@ -564,7 +564,7 @@ void DataLens::ApplyLimitOffset(std::vector<uint8_t>& results, const QueryObject
     results.swap(trimmed);
 }
 
-size_t DataLens::GetRowStride(const QueryObject& query)
+size_t DataLens::GetRowStride(const DataQueryObject& query)
 {
     size_t stride = 0;
 
