@@ -30,6 +30,113 @@ enum class DataLensValueType : uint8_t
     GUID        // 128-bit universally unique identifier
 };
 
+enum class DataQueryOperator : uint8_t
+{
+    Equals, NotEquals, Less, LessOrEqual, Greater, GreaterOrEqual,
+    BitmaskHas, BitmaskNot, Range, Not,
+    Add, Subtract, Multiply, Divide, Modulo,
+    And, Or, Xor,
+    Negate, LogicalNot,
+    Sum, Count, Min, Max
+};
+
+enum class DataUpdateType : uint8_t
+{
+    Insert,
+    Update,
+    Delete
+};
+
+enum class DataQueryAggregateType : uint8_t
+{
+    None = 0,
+    Sum,
+    SumIf,
+    Count,
+    Min,
+    Max,
+    Avg
+};
+
+struct DataQueryAggregate
+{
+    DataQueryAggregateType Type;
+    size_t TargetExprIndex; // index into Expressions
+    size_t OutputColumnIndex; // index into SelectColumns
+};
+
+enum class DataQueryExprType : uint8_t
+{
+    ColumnRef,
+    Constant,
+    UnaryOp,
+    BinaryOp,
+    Aggregate
+};
+
+struct DataQueryExpr
+{
+    DataQueryExprType Type;
+    DataLensValueType ResultType;
+
+    // Column reference
+    size_t StoreIndex = SIZE_MAX;
+    size_t ColumnIndex = SIZE_MAX;
+
+    // Constant
+    union {
+        int64_t IntValue;
+        uint64_t UIntValue;
+        double DoubleValue;
+        float FloatValue;
+        bool BoolValue;
+        uint64_t BitmaskValue;
+    };
+
+    // Unary operator
+    DataQueryOperator UnaryOperator;
+    size_t OperandIndex = SIZE_MAX;
+
+    // Binary operator
+    DataQueryOperator BinaryOperator;
+    size_t LeftOperandIndex = SIZE_MAX;
+    size_t RightOperandIndex = SIZE_MAX;
+
+    // Aggregate
+    DataQueryAggregateType AggType = DataQueryAggregateType::None;
+    size_t TargetExprIndex = SIZE_MAX; // for grouping/aggregates
+    bool IsGroupLevel = false;         // true if evaluated per group
+};
+
+struct DataUpdateExpr
+{
+    DataQueryExprType Type;
+    DataLensValueType ResultType;
+
+    // Column reference
+    size_t StoreIndex = SIZE_MAX;
+    size_t ColumnIndex = SIZE_MAX;
+
+    // Constant
+    union {
+        int64_t IntValue;
+        uint64_t UIntValue;
+        double DoubleValue;
+        float FloatValue;
+        bool BoolValue;
+        uint64_t BitmaskValue;
+    };
+
+    // Unary operator
+    DataQueryOperator UnaryOperator;
+    size_t OperandIndex = SIZE_MAX;
+
+    // Binary operator
+    DataQueryOperator BinaryOperator;
+    size_t LeftOperandIndex = SIZE_MAX;
+    size_t RightOperandIndex = SIZE_MAX;
+};
+
 namespace DataLensValueTypeUtils
 {
     static size_t GetStride(DataLensValueType type)
@@ -54,20 +161,6 @@ namespace DataLensValueTypeUtils
 
     static void ConvertData(const void* src, DataLensValueType fromType, void* dst, DataLensValueType toType);
 }
-
-enum class DataQueryOperator : uint8_t
-{
-    Equals,
-    NotEquals,
-    Less,
-    LessOrEqual,
-    Greater,
-    GreaterOrEqual,
-    BitmaskHas,
-    BitmaskNot,
-    Range,
-    Not
-};
 
 struct DataStoreColumnSchema
 {
@@ -142,8 +235,11 @@ struct DataQueryJoin
 
 struct DataQueryColumn
 {
-    size_t StoreIndex;
-    size_t ColumnIndex;
+    bool IsCalculated = false;
+    size_t ExprRootIndex = SIZE_MAX;  // index into DataQueryObject::Expressions
+    size_t StoreIndex = SIZE_MAX;     // only for non-calculated columns
+    size_t ColumnIndex = SIZE_MAX;    // only for non-calculated columns
+    DataLensValueType ResultType;     // inferred type of column (for cache stride)
 };
 
 struct DataUpdateColumn
@@ -152,41 +248,52 @@ struct DataUpdateColumn
     /// SIZE_MAX if target is the view cache
     /// </summary>
     size_t TargetStoreIndex;
+
     /// <summary>
-    /// index in the target store or view
+    /// Index in the target store or view
     /// </summary>
     size_t TargetColumnIndex;
+
     /// <summary>
-    /// index in the DataView cache to read from
+    /// Index in the DataView cache to read from (if not constant or expression)
     /// </summary>
     size_t SourceColumnIndex;
+
     /// <summary>
-    /// true if this column should always write the same value
+    /// True if this column should always write the same constant value
     /// </summary>
     bool IsConstant = false;
+
     /// <summary>
-    /// bytes for constant
+    /// Bytes for constant
     /// </summary>
     std::vector<uint8_t> ConstantValue;
-};
 
-struct DataQueryResultRow
-{
-    std::vector<size_t> RowIndicesPerStore; // row index in each DataStore
+    /// <summary>
+    /// Root index of a calculated expression, optional
+    /// </summary>
+    size_t ExprRootIndex = SIZE_MAX;
+
+    /// <summary>
+    /// Result type of this update column (for type conversion)
+    /// </summary>
+    DataLensValueType ResultType;
 };
 
 struct DataQuerySortColumn
 {
     size_t StoreIndex;
     size_t ColumnIndex;
-    bool Descending;
+    bool Descending = false;
+    bool IsExpression = false;
+    size_t ExprRootIndex = SIZE_MAX; // if sorting by a calculated column
 };
 
 struct DataQueryPredicate
 {
-    size_t StoreIndex;          // which DataStore this predicate targets
-    size_t ColumnIndex;         // index into the DataStore schema
-    DataLensValueType ColumnType;        // primitive type for conversions
+    size_t StoreIndex;            // store this predicate targets
+    size_t ColumnIndex;           // column index in store
+    DataLensValueType ColumnType;
     DataQueryOperator Op;
 
     union {
@@ -194,85 +301,106 @@ struct DataQueryPredicate
         uint64_t UIntValue;
         double DoubleValue;
         float FloatValue;
-        uint64_t BitmaskValue;    // for tag masks
+        uint64_t BitmaskValue;
+        bool BoolValue;
     };
 
     union {
-        int64_t IntValueHigh;      // for range queries
+        int64_t IntValueHigh;
         uint64_t UIntValueHigh;
         double DoubleValueHigh;
         float FloatValueHigh;
     };
 
-    size_t SubPredicateStartIndex; // index into flat predicate array
-    size_t SubPredicateCount;      // number of nested predicates
+    // Nested predicates support
+    size_t SubPredicateStartIndex = 0;
+    size_t SubPredicateCount = 0;
 };
 
 struct DataQueryObject
 {
     /// <summary>
-    /// Stores involved
+    /// Stores involved in query
     /// </summary>
     std::vector<size_t> DataStoreIndices;
+
     /// <summary>
-    /// Predicates (with StoreIndex)
+    /// Predicates (flat array, supports nested via SubPredicateStartIndex/SubPredicateCount)
     /// </summary>
     std::vector<DataQueryPredicate> Predicates;
+
     /// <summary>
-    /// join conditions
+    /// Joins (always equality-based)
     /// </summary>
     std::vector<DataQueryJoin> Joins;
+
     /// <summary>
-    /// if true, ignore SelectColumns and select all columns
+    /// Calculated columns support
+    /// </summary>
+    std::vector<DataQueryExpr> Expressions;
+
+    std::vector<DataQueryAggregate> Aggregates;
+
+    /// <summary>
+    /// Columns to return
     /// </summary>
     bool SelectAll = false;
-    /// <summary>
-    /// which columns to return, in order
-    /// </summary>
     std::vector<DataQueryColumn> SelectColumns;
+
     /// <summary>
-    /// sort info
+    /// Sort info
     /// </summary>
     std::vector<DataQuerySortColumn> SortColumns;
+
+    // Limit / Offset
     size_t Limit = SIZE_MAX;
     size_t Offset = 0;
+
+    /// <summary>
+    /// Optional grouping/aggregates
+    /// </summary>
+    std::vector<size_t> GroupByColumns; // indices into SelectColumns
 };
 
 struct DataUpdateObject
 {
+    /// <summary>
+    /// Type of this update (Insert, Update, Delete)
+    /// </summary>
+    DataUpdateType Type = DataUpdateType::Update;
+
     /// <summary>
     /// Which stores are affected
     /// </summary>
     std::vector<size_t> TargetStores;
 
     /// <summary>
-    /// Column mappings
+    /// Column mappings (constant, cache column, or expression)
     /// </summary>
     std::vector<DataUpdateColumn> Columns;
 
     /// <summary>
-    /// Optional predicates to filter which rows are affected
+    /// Predicates to filter affected rows
     /// </summary>
     std::vector<DataQueryPredicate> Predicates;
 
     /// <summary>
-    /// Optional sort, limit, offset if you want to apply updates in order or batch
+    /// Optional sort, limit, offset for ordered/batched updates
     /// </summary>
     std::vector<DataQuerySortColumn> SortColumns;
     size_t Limit = SIZE_MAX;
     size_t Offset = 0;
 
     /// <summary>
-    /// Can insert new records
+    /// Expression trees for computed assignments
+    /// </summary>
+    std::vector<DataUpdateExpr> Expressions;
+
+    /// <summary>
+    /// Legacy convenience flags
     /// </summary>
     bool InsertIfNotExists = false;
-    /// <summary>
-    /// Can update existing records
-    /// </summary>
     bool UpdateIfExists = false;
-    /// <summary>
-    /// Can delete existing records
-    /// </summary>
     bool DeleteIfRemoved = false;
 };
 
@@ -280,7 +408,29 @@ struct DataViewSchema
 {
     std::vector<DataViewColumnSchema> Columns;
     DataQueryObject Query;
+
+    /// <summary>
+    /// Optional update object for Inserts
+    /// </summary>
+    DataUpdateObject Insert;
+
+    /// <summary>
+    /// Optional update object for Updates
+    /// </summary>
     DataUpdateObject Update;
+
+    /// <summary>
+    /// Optional update object for Deletes
+    /// </summary>
+    DataUpdateObject Delete;
+};
+
+struct QueryResultCache
+{
+    std::vector<uint8_t> Data;              // flat row-major memory
+    std::vector<size_t> ColumnOffsets;      // per column byte offset
+    std::vector<uint8_t*> RowStartPointers; // pointers to each row start
+    size_t RowStride = 0;                    // total bytes per row
 };
 
 struct DataViewRegistry
