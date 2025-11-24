@@ -4,15 +4,14 @@
  * © 2025 Heathen Engineering. All rights reserved.
  *
  * Author: James McGhee
- * Date:   2025-11-04 - 2025-11-16
+ * Date:   2025-11-04 - 2025-11-24
  ******************************************************************************/
 
 #pragma once
 
-#include <vector>
 #include <cstdint>
-#include <stdexcept>
-#include <cstring>
+#include <string>
+#include <vector>
 
 enum class DataLensValueType : uint8_t
 {
@@ -32,12 +31,30 @@ enum class DataLensValueType : uint8_t
 
 enum class DataQueryOperator : uint8_t
 {
-    Equals, NotEquals, Less, LessOrEqual, Greater, GreaterOrEqual,
-    BitmaskHas, BitmaskNot, Range, Not,
-    Add, Subtract, Multiply, Divide, Modulo,
-    And, Or, Xor,
-    Negate, LogicalNot,
-    Sum, Count, Min, Max
+    Equals, 
+    NotEquals, 
+    Less, 
+    LessOrEqual, 
+    Greater, 
+    GreaterOrEqual,
+    BitmaskHas, 
+    BitmaskNot, 
+    Range, 
+    Not,
+    Add, 
+    Subtract, 
+    Multiply, 
+    Divide, 
+    Modulo,
+    And, 
+    Or, 
+    Xor,
+    Negate, 
+    LogicalNot,
+    Sum, 
+    Count, 
+    Min, 
+    Max
 };
 
 enum class DataUpdateType : uint8_t

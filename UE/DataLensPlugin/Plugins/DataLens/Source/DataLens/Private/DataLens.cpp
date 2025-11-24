@@ -4,14 +4,27 @@
  * © 2025 Heathen Engineering. All rights reserved.
  *
  * Author: James McGhee
- * Date:   2025-11-14 - 2025-11-15
+ * Date:   2025-11-14 - 2025-11-24
  ******************************************************************************/
 
+#pragma once
+
 #include "DataLens.h"
+#include <algorithm>
+#include <cctype>
+#include <cstdint>
 #include <cstring>
+#include <DataLensSchema.h>
+#include <DataStore.h>
+#include <exception>
+#include <iterator>
+#include <memory>
 #include <regex>
 #include <sstream>
-#include <algorithm>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
 
 inline DataLens::DataLens(const DataLensSchema& schema)
     : mSchema(schema)
@@ -24,8 +37,6 @@ inline DataLens::DataLens(const DataLensSchema& schema)
         const DataStoreSchema& store = mSchema[i];
 
         size_t prealloc = store.DefaultCapacity;
-        if (prealloc == 0)
-            prealloc = 0; // optional: allow zero-capacity stores; change if you want a minimum
 
         mStores.emplace_back(store.Columns, prealloc);
     }
