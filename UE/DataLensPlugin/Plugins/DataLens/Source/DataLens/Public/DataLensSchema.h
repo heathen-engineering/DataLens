@@ -423,6 +423,7 @@ struct DataUpdateObject
 
 struct DataViewSchema
 {
+    std::string Name;
     std::vector<DataViewColumnSchema> Columns;
     DataQueryObject Query;
 
