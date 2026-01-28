@@ -1,10 +1,10 @@
 /******************************************************************************
  * DataLens.h
  *
- * © 2025 Heathen Engineering. All rights reserved.
+ * (c) 2025-2026 Heathen Engineering. All rights reserved.
  *
  * Author: James McGhee
- * Date:   2025-11-14 - 2025-11-15
+ * Date:   2025-11-14 - 2026-01-27
  ******************************************************************************/
 
 #pragma once
@@ -17,6 +17,8 @@
 #include <utility>
 #include <vector>
 
+DECLARE_LOG_CATEGORY_EXTERN(LogDataLens, Log, All);
+
 class DataLens
 {
 public:
@@ -25,6 +27,9 @@ public:
 	/// </summary>
 	/// <param name="schema"></param>
 	explicit DataLens(const DataLensSchema& schema);
+
+	bool IsValid() const { return bIsValid; }
+
 	/// <summary>
 	/// Serialize the schema and stores to a byte array.
 	/// This is useful for writing to disk as a save file.
@@ -52,7 +57,7 @@ public:
 	/// <returns>The index of the matching store if any, if none this will return SIZE_MAX</returns>
 	size_t FindStore(const std::string& name) const;
 	size_t GetStoreRowCount(size_t id);
-	
+
 	/************************************************************
 	 * 
 	 * Data View Features
@@ -76,14 +81,27 @@ public:
 	size_t AddViewRow(size_t view, const uint8_t* data);
 	bool RemoveViewRow(size_t view, size_t row);
 	bool RefreshView(size_t id);
-	bool FlushView(size_t id);
 
 private:
-	DataLensSchema mSchema; 
+	DataLensSchema mSchema;
 	std::vector<DataStore> mStores;
 	std::vector<DataViewRegistry> mViews;
 	std::unordered_map<std::string, size_t> mViewNameToID;
 	
+	bool bIsValid = true;
+	
+	bool ResolveJoinsInline(const DataQueryObject& query, std::vector<size_t>& rowIndices) const;
+	bool EvaluatePredicatesInline(const DataQueryObject& query, const std::vector<size_t>& rowIndices, size_t viewIndex) const;
+	void EvaluateExpressionInline(const DataQueryExpr& expr,
+								  const std::vector<size_t>& rowIndices,
+								  const std::vector<size_t>& storeMapping,
+								  const DataQueryObject& query,
+								  void* dst) const;
+	uint8_t* AppendEmptyRow(DataViewRegistry::CacheMetadata& cache);
+	void ApplyGroupingAndAggregatesInPlace(const DataViewSchema& view,
+										   DataViewRegistry::CacheMetadata& cache,
+										   const DataQueryObject& query);
+
 	/// <summary>
 	/// Creates a new QueryObject based on the sql like expression provided
 	/// </summary>
@@ -95,7 +113,7 @@ private:
 	/// </summary>
 	/// <param name="sql">A TSQL like expression defining the query you wish to run</param>
 	/// <returns>A compiled and ready to run update</returns>
-	DataUpdateObject GetUpdate(const std::string sql);
+	DataUpdateObject GetUpdate(size_t viewIndex, const std::string sql);
 
 	/// <summary>
 	/// Run a prepared query object and return the raw row major results.
@@ -122,32 +140,32 @@ private:
 	std::vector<uint8_t> LiteralToBytes(const std::string& lit, DataLensValueType type) const;
 	size_t ParseOperandToExprIndex(const std::string& token, DataUpdateObject& update);
 	DataQueryOperator OpStringToOperator(const std::string& op) const;
-	DataQueryPredicate ParseWhereToPredicate(const std::string& whereText) const;
+	DataQueryPredicate ParseWhereToPredicate(size_t viewIndex, const std::string& whereText) const;
 
-	/// <summary>Gather all row indices from involved stores before applying predicates.</summary>
-	/// <param name="query">The query object describing involved stores.</param>
-	/// <returns>A vector of row index vectors, one per store.</returns>
-	std::vector<std::vector<size_t>> GatherCandidateRows(const DataQueryObject& query) const;
-
-	/// <summary>Generate Cartesian product or join-compliant row sets for multi-store queries.</summary>
-	/// <param name="storeIndices">Indices of stores involved.</param>
-	/// <param name="joins">Join definitions between stores.</param>
-	/// <returns>A vector of joined row index sets.</returns>
-	std::vector<std::vector<size_t>> PerformJoins(const std::vector<size_t>& storeIndices, const std::vector<DataQueryJoin>& joins) const;
-
-	/// <summary>Evaluate a single predicate against a row.</summary>
+	/// <summary>
+	/// Evaluates a single predicate against a specific combination of rows from one or more stores.
+	/// </summary>
 	/// <param name="pred">The predicate to evaluate.</param>
-	/// <param name="rowPtrs">Pointers to the row data.</param>
-	/// <param name="stores">Reference to all data stores.</param>
-	/// <returns>True if the row satisfies the predicate, false otherwise.</returns>
-	bool EvaluatePredicate(const DataQueryPredicate& pred, const std::vector<uint8_t*>& rowPtrs, const std::vector<DataStore>& stores) const;
-
-	/// <summary>Filter a set of candidate rows by all predicates, including nested ones.</summary>
-	/// <param name="candidateRows">Candidate row index sets.</param>
-	/// <param name="query">The query object containing predicates.</param>
-	/// <returns>Filtered candidate rows.</returns>
-	std::vector<std::vector<size_t>> FilterRowsByPredicates(const std::vector<std::vector<size_t>>& candidateRows, const DataQueryObject& query) const;
-
+	/// <param name="rowIndices">
+	/// A vector of row indices corresponding to the candidate rows for each store in storeMapping. 
+	/// Each element represents the row index in the respective store.
+	/// </param>
+	/// <param name="storeMapping">
+	/// A vector mapping the query's logical store indices to actual store IDs in the DataLens instance. 
+	/// Used to resolve which store each rowIndex belongs to.
+	/// </param>
+	/// <param name="viewIndex">
+	/// Optional index of the view to use if the predicate references cached columns. 
+	/// Defaults to SIZE_MAX if no view is involved.
+	/// </param>
+	/// <returns>
+	/// True if the row combination satisfies the predicate; otherwise, false.
+	/// </returns>
+	bool EvaluatePredicate(const DataQueryPredicate& pred,
+									 const std::vector<size_t>& rowIndices,
+									 const std::vector<size_t>& storeMapping,
+									 size_t viewIndex = SIZE_MAX) const;
+	
 	/// <summary>
 	/// Evaluate an expression tree by index into a set of expressions for a specific row.
 	/// </summary>
@@ -155,59 +173,101 @@ private:
 	/// <param name="expressions">The full array of expressions</param>
 	/// <param name="rowPtrs">Pointers to current row data per store</param>
 	/// <param name="outRow">Buffer to write the result</param>
-	void EvaluateExpressionTree(size_t exprIndex, const std::vector<DataQueryExpr>& expressions, const std::vector<uint8_t*>& rowPtrs, std::vector<uint8_t>& outRow) const;
+	void EvaluateExpressionTree(size_t exprIndex, const std::vector<DataQueryExpr>& expressions,
+	                            const std::vector<uint8_t*>& rowPtrs, std::vector<uint8_t>& outRow) const;
 
 	/// <summary>Apply a binary operator to two typed operands and store result in output.</summary>
-	void ApplyBinaryOp(DataQueryOperator op, const void* left, DataLensValueType leftType, const void* right, DataLensValueType rightType, void* out, DataLensValueType outType) const;
+	void ApplyBinaryOp(DataQueryOperator op, const void* left, DataLensValueType leftType, const void* right,
+	                   DataLensValueType rightType, void* out, DataLensValueType outType) const;
 
 	/// <summary>Apply a unary operator to a typed operand and store result in output.</summary>
-	void ApplyUnaryOp(DataQueryOperator op, const void* operand, DataLensValueType operandType, void* out, DataLensValueType outType) const;
+	void ApplyUnaryOp(DataQueryOperator op, const void* operand, DataLensValueType operandType, void* out,
+	                  DataLensValueType outType) const;
 
 	/// <summary>Evaluate a single expression tree for a given row.</summary>
 	/// <param name="expr">The expression to evaluate.</param>
 	/// <param name="rowPtrs">Pointers to the row data.</param>
 	/// <param name="outRow">Output buffer for evaluated row data.</param>
-	void EvaluateExpression(const DataQueryExpr& expr, const std::vector<uint8_t*>& rowPtrs, std::vector<uint8_t>& outRow) const;
-
-	/// <summary>Evaluate all calculated columns for a set of rows.</summary>
-	/// <param name="expressions">Expression trees to evaluate.</param>
-	/// <param name="rowPtrs">Pointers to row data sets.</param>
-	/// <param name="outputRows">Output buffer for evaluated rows.</param>
-	void EvaluateExpressions(const std::vector<DataQueryExpr>& expressions, const std::vector<std::vector<uint8_t*>>& rowPtrs, std::vector<std::vector<uint8_t>>& outputRows) const;
-
+	void EvaluateExpression(const std::vector<DataQueryExpr>& expressions,
+							const DataQueryExpr& expr,
+							const std::vector<size_t>& rowIndicesPerStore,
+							const std::vector<size_t>& storeMapping,
+							std::vector<uint8_t>& outValue) const;
+	
 	/// <summary>Group rows based on GroupByColumns.</summary>
+	/// <param name="SchemaColumns">The structure of the rows passed in</param>
 	/// <param name="rows">Rows to group.</param>
 	/// <param name="groupByColumns">Indices of columns to group by.</param>
 	/// <returns>Map of group keys to row indices.</returns>
-	std::unordered_map<std::string, std::vector<size_t>> GroupRows(const std::vector<std::vector<uint8_t>>& rows, const std::vector<size_t>& groupByColumns) const;
+	std::unordered_map<std::string, std::vector<size_t>> GroupRows(
+		const std::vector<DataViewColumnSchema> SchemaColumns, 
+		const std::vector<std::vector<uint8_t>>& rows,
+		const std::vector<size_t>& groupByColumns) const;
 
-	/// <summary>Apply aggregates to grouped rows.</summary>
-	/// <param name="aggregates">Aggregates to apply.</param>
-	/// <param name="groupedRows">Grouped row indices to update with aggregate results.</param>
-	void ApplyAggregates(const std::vector<DataQueryAggregate>& aggregates, std::unordered_map<std::string, std::vector<size_t>>& groupedRows) const;
+	/// <summary>
+	/// Apply aggregates to grouped rows.
+	/// </summary>
+	/// <param name="schemaColumns">
+	/// The schema for the evaluated rows, defining column types and strides.
+	/// </param>
+	/// <param name="evaluatedRows">
+	/// Evaluated rows after expression execution (row-major, each row is a byte vector).
+	/// </param>
+	/// <param name="aggregates">
+	/// The aggregates to apply (SUM, AVG, COUNT, MIN, MAX, etc.).
+	/// </param>
+	/// <param name="groupedRows">
+	/// Map of group keys to row indices. This will be updated in-place to contain
+	/// the aggregated rows (usually by replacing the row index with the aggregated
+	/// row index or updating the referenced row values).
+	/// </param>
+	void ApplyAggregates(
+	const std::vector<DataViewColumnSchema>& schema,
+	const std::vector<std::vector<uint8_t>>& evaluatedRows,
+	const std::vector<DataQueryAggregate>& aggregates,
+	std::unordered_map<std::string, std::vector<size_t>>& groupedRows) const;
 
-	/// <summary>Build the flat row-major cache for a DataView.</summary>
-	/// <param name="view">The view schema defining the cache.</param>
-	/// <param name="evaluatedRows">Rows after evaluation.</param>
-	/// <param name="cache">The cache to populate.</param>
-	void BuildRowCache(const DataViewSchema& view, const std::vector<std::vector<uint8_t>>& evaluatedRows, DataViewRegistry::CacheMetadata& cache);
+	/// <summary>
+	/// Build the flat row-major cache for a DataView.
+	/// </summary>
+	/// <param name="view">
+	/// The view schema defining the cache layout (columns + query).
+	/// </param>
+	/// <param name="evaluatedRows">
+	/// Rows after expression evaluation, grouped/aggregated if required.
+	/// Each row is a vector of bytes matching the view's column schema.
+	/// </param>
+	/// <param name="cache">
+	/// Cache metadata to populate (RowStride, ColumnOffsets, Data, RowStartPointers, DirtyRows).
+	/// </param>
+	void BuildRowCache(const DataViewSchema& view, const std::vector<std::vector<uint8_t>>& evaluatedRows,
+	                   DataViewRegistry::CacheMetadata& cache);
 
-	/// <summary>Sort cache based on query SortColumns, including expression support.</summary>
+	/// <summary>
+	/// Sort cache based on query SortColumns, including expression support.
+	/// </summary>
 	/// <param name="cache">The cache to sort.</param>
+	/// <param name="view">The owning view used to understand column type and stride</param>
 	/// <param name="sortColumns">Sort column definitions.</param>
-	void SortRowCache(DataViewRegistry::CacheMetadata& cache, const std::vector<DataQuerySortColumn>& sortColumns) const;
+	void SortRowCache(DataViewRegistry::CacheMetadata& cache,
+				  const DataViewSchema& view,
+				  const std::vector<DataQuerySortColumn>& sortColumns) const;
 
 	/// <summary>Apply LIMIT and OFFSET to final cache data.</summary>
 	/// <param name="cache">The cache to modify.</param>
 	/// <param name="query">Query object containing limit and offset.</param>
 	void ApplyLimitOffsetToCache(DataViewRegistry::CacheMetadata& cache, const DataQueryObject& query) const;
 
-	/// <summary>Convert cache rows to DataCommandValue objects for target stores.</summary>
+	/// <summary>
+	/// Convert cache rows to DataCommandValue objects for target stores.
+	/// </summary>
 	/// <param name="viewRegistry">View registry containing cache data.</param>
 	/// <returns>Vector of DataCommandValue updates.</returns>
 	std::vector<DataCommandValue> BuildUpdatesFromCache(const DataViewRegistry& viewRegistry) const;
 
-	/// <summary>Apply all DataCommandValue updates to target stores.</summary>
+	/// <summary>
+	/// Apply all DataCommandValue updates to target stores.
+	/// </summary>
 	/// <param name="updates">Updates to apply.</param>
 	/// <returns>True if all updates succeeded.</returns>
 	bool ApplyUpdates(const std::vector<DataCommandValue>& updates);
@@ -229,5 +289,8 @@ private:
 	/// <param name="rowPtrs">Pointers to the rows.</param>
 	/// <param name="groupColumns">Indices of columns used for grouping.</param>
 	/// <returns>String key representing the group.</returns>
-	std::string MakeGroupKey(const std::vector<uint8_t*>& rowPtrs, const std::vector<size_t>& groupColumns) const;
+	std::string MakeGroupKey(const std::vector<uint8_t*>& rowPtrs, const std::vector<size_t>& groupColumns) const
+	{
+		return "";
+	}
 };

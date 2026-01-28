@@ -1,7 +1,7 @@
 /******************************************************************************
  * DataLensBPLibrary.cpp
  *
- * © 2025 Heathen Engineering. All rights reserved.
+ * ï¿½ 2025 Heathen Engineering. All rights reserved.
  *
  * Author: James McGhee
  * Date:   2025-11-04 - 2025-11-15
@@ -11,8 +11,6 @@
 #include "DataLensModule.h"
 
 UDataLensBPLibrary::UDataLensBPLibrary(const FObjectInitializer& ObjectInitializer)
-: Super(ObjectInitializer)
+	: Super(ObjectInitializer)
 {
-
 }
-
