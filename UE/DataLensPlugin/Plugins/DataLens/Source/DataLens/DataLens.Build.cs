@@ -1,10 +1,10 @@
 /******************************************************************************
  * DataLensBuild.cs
  *
- * � 2025 Heathen Engineering. All rights reserved.
+ * (c) 2025-2026 Heathen Engineering. All rights reserved.
  *
  * Author: James McGhee
- * Date:   2025-11-04 - 2025-11-15
+ * Date:   2025-11-04 - 2026-01-29
  ******************************************************************************/
 
 using UnrealBuildTool;
@@ -20,6 +20,18 @@ public class DataLens : ModuleRules
 				// ... add public include paths required here ...
 			}
 			);
+
+		if (Target.Platform == UnrealTargetPlatform.Linux)
+		{
+			PublicIncludePaths.AddRange(
+				new string[] {
+					"/usr/include/c++/13",
+					"/usr/include/x86_64-linux-gnu/c++/13",
+					"/usr/include/c++/13/backward",
+					"/usr/lib/gcc/x86_64-linux-gnu/13/include"
+				}
+			);
+		}
 				
 		
 		PrivateIncludePaths.AddRange(

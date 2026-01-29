@@ -1,10 +1,10 @@
 /******************************************************************************
  * DataLens.cpp
  *
- * � 2025 Heathen Engineering. All rights reserved.
+ * (c) 2025-2026 Heathen Engineering. All rights reserved.
  *
  * Author: James McGhee
- * Date:   2025-11-14 - 2025-11-24
+ * Date:   2025-11-04 - 2026-01-29
  ******************************************************************************/
 
 #pragma once
