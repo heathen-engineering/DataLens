@@ -209,6 +209,8 @@ struct DataStoreSchema
 	std::vector<DataStoreColumnSchema> Columns;
 	uint64_t DefaultCapacity;
 	uint32_t Version = 1;
+	
+	size_t GetColumnIndex(const std::string& name) const;
 
 	DataStoreSchema() = default;
 
@@ -447,6 +449,11 @@ struct DataUpdateObject
 	/// Expression trees for computed assignments
 	/// </summary>
 	std::vector<DataUpdateExpr> Expressions;
+	
+	/// <summary>
+	/// Defines the joins
+	/// </summary>
+	std::vector<DataQueryJoin> SourceJoins;
 
 	/// <summary>
 	/// Legacy convenience flags
@@ -476,6 +483,8 @@ struct DataViewSchema
 	/// Optional update object for Deletes
 	/// </summary>
 	DataUpdateObject Delete;
+	
+	size_t GetColumnIndex(const std::string& name) const;
 };
 
 struct QueryResultCache

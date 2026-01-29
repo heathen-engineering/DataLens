@@ -1126,7 +1126,7 @@ DataUpdateObject DataLens::GetUpdate(size_t viewIndex, const std::string sql)
 		update.Type = DataUpdateType::Add;
 		update.InsertIfNotExists = true;
 
-		// Expect: INSERT INTO <Table> (col,...) FROM CACHE
+		// Expect: INSERT INTO <Table> (col,...) FROM CACHE [JOIN ...] [WHERE ...]
 		std::string intoToken, tableName;
 		iss >> intoToken >> tableName;
 		if (ToUpper(intoToken) != "INTO")
@@ -1137,9 +1137,7 @@ DataUpdateObject DataLens::GetUpdate(size_t viewIndex, const std::string sql)
 		tableName = Trim(tableName);
 		const DataStoreSchema* storeSchemaPtr = mSchema.GetStore(tableName);
 		if (!storeSchemaPtr)
-		{
 			throw std::runtime_error("INSERT target store not found: " + tableName);
-		}
 
 		size_t storeIndex = SIZE_MAX;
 		for (size_t i = 0; i < mSchema.Count(); ++i)
@@ -1152,195 +1150,125 @@ DataUpdateObject DataLens::GetUpdate(size_t viewIndex, const std::string sql)
 		}
 		update.TargetStores.push_back(storeIndex);
 
-		// read rest
+		// Read rest of statement
 		std::string rest;
 		std::getline(iss, rest);
 		rest = Trim(rest);
 
-		// parse column list (optional)
+		// Parse column list
 		std::vector<std::string> columns;
 		if (!rest.empty() && rest[0] == '(')
 		{
 			size_t endp = rest.find(')');
 			if (endp == std::string::npos)
-			{
 				throw std::runtime_error("Malformed column list in INSERT");
-			}
+
 			std::string colsText = rest.substr(1, endp - 1);
 			columns = SplitCSV(colsText);
 			rest = Trim(rest.substr(endp + 1));
 		}
 
-		// handle two forms: VALUES (...) or FROM CACHE
+		// Must specify source: FROM CACHE
 		std::string restUpper = ToUpper(rest);
-		if (restUpper.find("VALUES") == 0)
+		if (restUpper.find("FROM CACHE") != 0)
 		{
-			// VALUES (...) [, (...), ...]
-			size_t pos = 6; // after VALUES
-			std::string valsText = Trim(rest.substr(pos));
-			// split on ")"
-			size_t idx = 0;
-			while (idx < valsText.size())
-			{
-				size_t start = valsText.find('(', idx);
-				if (start == std::string::npos)
-				{
-					break;
-				}
-				size_t end = valsText.find(')', start);
-				if (end == std::string::npos)
-				{
-					throw std::runtime_error("Malformed VALUES list");
-				}
-				std::string group = valsText.substr(start + 1, end - start - 1);
-				std::vector<std::string> vals = SplitCSV(group);
-				if (!columns.empty() && columns.size() != vals.size())
-				{
-					throw std::runtime_error("Column/value count mismatch in VALUES");
-				}
-				// If columns empty, assume target store columns order (excluding IsValid?) � but you must supply columns for unambiguous mapping.
-				if (columns.empty())
-				{
-					throw std::runtime_error("INSERT without column list and VALUES not supported");
-				}
-				// create update columns as constants for this INSERT: we will append one set of constant columns; multi-row INSERT will be represented as multiple DataUpdateObjects in future; for now we support single-row or user can supply multiple statements.
-				for (size_t ci = 0; ci < columns.size(); ++ci)
-				{
-					const auto& cols = storeSchemaPtr->Columns;
-					auto it = std::find_if(cols.begin(), cols.end(), [&](const DataStoreColumnSchema& c)
-					{
-						return c.Name == columns[ci];
-					});
-					if (it == cols.end())
-					{
-						throw std::runtime_error("Column not found in INSERT: " + columns[ci]);
-					}
-					DataUpdateColumn duc{};
-					duc.TargetStoreIndex = storeIndex;
-					duc.TargetColumnIndex = it - cols.begin();
-					duc.IsConstant = true;
-					duc.ResultType = it->Type;
-					duc.ConstantValue = LiteralToBytes(vals[ci], it->Type);
-					update.Columns.push_back(duc);
-				}
-				idx = end + 1;
-			}
+			throw std::runtime_error("INSERT must specify FROM CACHE");
 		}
-		else
+
+		rest = Trim(rest.substr(10)); // skip "FROM CACHE"
+
+		// Optional JOINs and WHERE
+		// For simplicity: look for "JOIN" and "WHERE" tokens
+		std::string joinPart, wherePart;
+		size_t posJoin = ToUpper(rest).find("JOIN");
+		size_t posWhere = ToUpper(rest).find("WHERE");
+
+		if (posJoin != std::string::npos)
 		{
-			// Expect FROM <source>
-			// Typical: FROM CACHE
-			std::string fromTok;
-			std::istringstream rs(rest);
-			rs >> fromTok;
-			if (ToUpper(fromTok) != "FROM")
+			if (posWhere != std::string::npos && posWhere > posJoin)
 			{
-				throw std::runtime_error("INSERT must specify FROM or VALUES");
-			}
-			std::string sourceName;
-			rs >> sourceName;
-			if (ToUpper(sourceName) != "CACHE")
-			{
-				// allow FROM <Store> as a copy-from-store
-				const DataStoreSchema* srcPtr = mSchema.GetStore(sourceName);
-				if (!srcPtr)
-				{
-					throw std::runtime_error("Unsupported INSERT FROM source: " + sourceName);
-				}
-				// INSERT ... FROM OtherStore : treat as source store. We'll set target mapping to read from source store columns.
-				size_t srcIndex = SIZE_MAX;
-				for (size_t i = 0; i < mSchema.Count(); ++i)
-				{
-					if (&mSchema[i] == srcPtr)
-					{
-						srcIndex = i;
-						break;
-					}
-				}
-				// If columns list provided we map source columns in same order; else assume identical layout.
-				if (columns.empty())
-				{
-					// map all columns (skip IsValid column index 0?) � we assume target store column list provided
-					for (size_t ci = 0; ci < srcPtr->Columns.size(); ++ci)
-					{
-						// create mapping from source store column to target store column by name
-						const auto& name = srcPtr->Columns[ci].Name;
-						auto it = std::find_if(storeSchemaPtr->Columns.begin(), storeSchemaPtr->Columns.end(),
-						                       [&](const DataStoreColumnSchema& c) { return c.Name == name; });
-						if (it == storeSchemaPtr->Columns.end())
-						{
-							continue; // skip if name not present
-						}
-						DataUpdateColumn duc{};
-						duc.TargetStoreIndex = storeIndex;
-						duc.TargetColumnIndex = it - storeSchemaPtr->Columns.begin();
-						duc.SourceColumnIndex = ci;
-						// indicates reading from source store column index; RunUpdate must interpret storeIndex != SIZE_MAX vs cache
-						duc.ResultType = it->Type;
-						update.Columns.push_back(duc);
-					}
-				}
-				else
-				{
-					// columns specified: map columns by name to source columns of same name
-					for (auto& cName : columns)
-					{
-						// find target column
-						auto itT = std::find_if(storeSchemaPtr->Columns.begin(), storeSchemaPtr->Columns.end(),
-						                        [&](const DataStoreColumnSchema& c) { return c.Name == cName; });
-						if (itT == storeSchemaPtr->Columns.end())
-						{
-							throw std::runtime_error("Target column not found: " + cName);
-						}
-						// find source column by name
-						auto itS = std::find_if(srcPtr->Columns.begin(), srcPtr->Columns.end(),
-						                        [&](const DataStoreColumnSchema& c) { return c.Name == cName; });
-						if (itS == srcPtr->Columns.end())
-						{
-							throw std::runtime_error("Source column not found: " + cName);
-						}
-						DataUpdateColumn duc{};
-						duc.TargetStoreIndex = storeIndex;
-						duc.TargetColumnIndex = itT - storeSchemaPtr->Columns.begin();
-						duc.SourceColumnIndex = itS - srcPtr->Columns.begin();
-						duc.ResultType = itT->Type;
-						update.Columns.push_back(duc);
-					}
-				}
+				joinPart = Trim(rest.substr(posJoin, posWhere - posJoin));
+				wherePart = Trim(rest.substr(posWhere + 5));
 			}
 			else
 			{
-				// FROM CACHE
-				// columns must be provided to map cache columns to target store columns
-				if (columns.empty())
+				joinPart = Trim(rest.substr(posJoin));
+			}
+		}
+		else if (posWhere != std::string::npos)
+		{
+			wherePart = Trim(rest.substr(posWhere + 5));
+		}
+
+		// Parse JOINs
+		if (!joinPart.empty())
+		{
+			// Expect syntax: JOIN <StoreName> ON <LeftCol>=<RightCol>
+			std::istringstream js(joinPart);
+			std::string joinToken;
+			js >> joinToken; // should be "JOIN"
+			while (ToUpper(joinToken) == "JOIN")
+			{
+				std::string joinStoreName, onToken, leftCol, eqToken, rightCol;
+				js >> joinStoreName >> onToken >> leftCol >> eqToken >> rightCol;
+				if (ToUpper(onToken) != "ON" || eqToken != "=")
+					throw std::runtime_error("Malformed JOIN clause");
+
+				const DataStoreSchema* joinStore = mSchema.GetStore(joinStoreName);
+				if (!joinStore)
+					throw std::runtime_error("JOIN target store not found: " + joinStoreName);
+
+				size_t joinStoreIndex = SIZE_MAX;
+				for (size_t i = 0; i < mSchema.Count(); ++i)
 				{
-					throw std::runtime_error("INSERT FROM CACHE requires column list");
+					if (&mSchema[i] == joinStore)
+					{
+						joinStoreIndex = i;
+						break;
+					}
 				}
 
-				for (size_t ci = 0; ci < columns.size(); ++ci)
-				{
-					// find target column in store
-					const auto& cols = storeSchemaPtr->Columns;
-					auto it = std::find_if(cols.begin(), cols.end(), [&](const DataStoreColumnSchema& c)
-					{
-						return c.Name == columns[ci];
-					});
-					if (it == cols.end())
-					{
-						throw std::runtime_error("Column not found in INSERT: " + columns[ci]);
-					}
-					DataUpdateColumn duc{};
-					duc.TargetStoreIndex = storeIndex;
-					duc.TargetColumnIndex = it - cols.begin();
-					// source column is cache column: we must encode the cache column index; but we don't have view columns here.
-					// We will store SourceColumnIndex as SIZE_MAX and set ExprRootIndex = SIZE_MAX to indicate run-time binding needed.
-					// However more usable is to expect the column token to be numeric index or the caller attaches mapping later.
-					// For now, set SourceColumnIndex = SIZE_MAX to indicate "read from cache column named <columns[ci]>" and RunUpdate must match by name.
-					duc.SourceColumnIndex = SIZE_MAX;
-					duc.ResultType = it->Type;
-					update.Columns.push_back(duc);
-				}
+				// Map columns: left is always cache column, right is store column
+				size_t leftIdx = mViews[viewIndex].Schema.GetColumnIndex(leftCol); // helper to map cache col name to index
+				size_t rightIdx = joinStore->GetColumnIndex(rightCol); 
+
+				DataQueryJoin join{};
+				join.LeftStoreIndex = SIZE_MAX; // cache
+				join.LeftColumnIndex = leftIdx;
+				join.RightStoreIndex = joinStoreIndex;
+				join.RightColumnIndex = rightIdx;
+
+				update.SourceJoins.push_back(join);
+
+				js >> joinToken; // next token, either "JOIN" or EOF
 			}
+		}
+
+		// Parse WHERE
+		if (!wherePart.empty())
+		{
+			DataQueryPredicate pred = ParseWhereToPredicate(viewIndex, wherePart);
+			update.Predicates.push_back(pred);
+		}
+
+		// Map columns to update
+		for (size_t ci = 0; ci < columns.size(); ++ci)
+		{
+			const auto& cols = storeSchemaPtr->Columns;
+			auto it = std::find_if(cols.begin(), cols.end(), [&](const DataStoreColumnSchema& c) {
+				return c.Name == columns[ci];
+			});
+			if (it == cols.end())
+				throw std::runtime_error("Column not found in INSERT: " + columns[ci]);
+
+			DataUpdateColumn duc{};
+			duc.TargetStoreIndex = storeIndex;
+			duc.TargetColumnIndex = it - cols.begin();
+
+			// By default, read from cache column of same name
+			duc.SourceColumnIndex = mViews[viewIndex].Schema.GetColumnIndex(columns[ci]);
+			duc.ResultType = it->Type;
+			update.Columns.push_back(duc);
 		}
 	}
 	else if (keyword == "UPDATE")

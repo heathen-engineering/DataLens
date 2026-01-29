@@ -12,6 +12,16 @@
 #include "DataLensSchema.h"
 #include <cstring>
 
+size_t DataStoreSchema::GetColumnIndex(const std::string& name) const
+{
+	for (size_t i = 0; i < Columns.size(); ++i)
+	{
+		if (Columns[i].Name == name)
+			return i;
+	}
+	return SIZE_MAX; // not found
+}
+
 size_t DataStoreSchema::GetStride() const
 {
 	size_t result = 0;
@@ -65,6 +75,16 @@ bool DataLensSchema::HasStore(const std::string& name) const
 size_t DataLensSchema::Count() const
 {
 	return mStores.size();
+}
+
+size_t DataViewSchema::GetColumnIndex(const std::string& name) const
+{
+	for (size_t i = 0; i < Columns.size(); ++i)
+	{
+		if (Columns[i].Name == name)
+			return i;
+	}
+	return SIZE_MAX; // not found
 }
 
 size_t DataLensValueTypeUtils::GetStride(DataLensValueType type)

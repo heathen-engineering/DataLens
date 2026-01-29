@@ -23,7 +23,7 @@ public class DataLens : ModuleRules
 
 		if (Target.Platform == UnrealTargetPlatform.Linux)
 		{
-			PublicIncludePaths.AddRange(
+			PublicSystemIncludePaths.AddRange(
 				new string[] {
 					"/usr/include/c++/13",
 					"/usr/include/x86_64-linux-gnu/c++/13",
