@@ -185,3 +185,34 @@ TEST_CASE("validity no longer overlaps column data (A2 wart fix)", "[datastore]"
     REQUIRE(store.GetRaw<float>(1, 0) == 7.5f);
     REQUIRE(store.IsValidRow(1));
 }
+
+TEST_CASE("column buffers are cache-line aligned (A3.6)", "[datastore]")
+{
+    REQUIRE(DataStore::CacheLineSize() == 64);
+
+    // A mix of strides (4, 4, 8) plus a wide one — every column buffer must start 64-aligned so
+    // concurrent Systems writing different columns never false-share a cache line.
+    std::vector<DataStoreColumnSchema> cols = {
+        {"A", DataLensValueType::Float},  // 4
+        {"B", DataLensValueType::Int32},  // 4
+        {"C", DataLensValueType::Double}, // 8
+        {"D", DataLensValueType::Int64},  // 8
+    };
+    DataStore store(cols, 1000);
+    for (size_t c = 0; c < store.GetColumnCount(); ++c)
+        REQUIRE(store.IsColumnCacheAligned(c));
+
+    // Still aligned after a schema conversion (rebuilds the column buffers).
+    DataStoreSchema wider;
+    wider.Columns = {
+        {"A", DataLensValueType::Double}, // widen 4 -> 8
+        {"C", DataLensValueType::Double},
+        {"E", DataLensValueType::Int32},  // new column
+    };
+    store.ConvertToSchema(wider);
+    for (size_t c = 0; c < store.GetColumnCount(); ++c)
+        REQUIRE(store.IsColumnCacheAligned(c));
+
+    // Out-of-range column reports false rather than reading past the end.
+    REQUIRE_FALSE(store.IsColumnCacheAligned(99));
+}

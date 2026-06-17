@@ -110,6 +110,15 @@ size_t DataStore::GetColumnCount() const { return mColumns.size(); }
 
 size_t DataStore::GetColumnStride(size_t col) const { return mColumns[col].GetStride(); }
 
+const uint8_t* DataStore::GetColumnRaw(size_t col) const
+{
+	if (col >= mColumnsData.size())
+	{
+		return nullptr;
+	}
+	return mColumnsData[col].data();
+}
+
 namespace
 {
 	inline unsigned CtzU64(uint64_t x)
@@ -184,6 +193,24 @@ void DataStore::SetLocked(size_t row, bool locked)
 	}
 }
 
+void DataStore::SetLod(size_t row, uint8_t level)
+{
+	if (row >= mRowCount)
+	{
+		return;
+	}
+	mLodLevels[row] = level;
+}
+
+uint8_t DataStore::GetLod(size_t row) const
+{
+	if (row >= mRowCount)
+	{
+		return 0;
+	}
+	return mLodLevels[row];
+}
+
 size_t DataStore::AllocRow()
 {
 	if (mRowCount == 0)
@@ -213,6 +240,7 @@ size_t DataStore::AllocRow()
 			const unsigned bit = CtzU64(free);
 			const size_t row = wi * 64 + bit;
 			mValidBits[wi] |= (1ULL << bit);
+			mLodLevels[row] = 0; // a freshly allocated row starts at full fidelity
 			++mLiveCount;
 			mAllocCursor = wi;
 			return row;
@@ -250,6 +278,16 @@ size_t DataStore::GetLiveCount() const
 	return mLiveCount;
 }
 
+bool DataStore::IsColumnCacheAligned(size_t col) const
+{
+	if (col >= mColumnsData.size())
+	{
+		return false;
+	}
+	const auto addr = reinterpret_cast<std::uintptr_t>(mColumnsData[col].data());
+	return (addr % CacheLineSize()) == 0;
+}
+
 /// <summary>
 /// Total bytes per row (sum of all column strides).
 /// </summary>
@@ -266,7 +304,7 @@ size_t DataStore::GetRowStride() const
 
 void DataStore::ConvertToSchema(const DataStoreSchema& newSchema)
 {
-	std::vector<std::vector<uint8_t>> newColumnsData;
+	std::vector<ColumnBuffer> newColumnsData;
 	newColumnsData.reserve(newSchema.Columns.size());
 
 	size_t rowCount = mRowCount;
@@ -274,7 +312,7 @@ void DataStore::ConvertToSchema(const DataStoreSchema& newSchema)
 	for (const DataStoreColumnSchema& newCol : newSchema.Columns)
 	{
 		size_t newStride = newCol.GetStride();
-		std::vector<uint8_t> newColData(rowCount * newStride, 0); // zero-initialize
+		ColumnBuffer newColData(rowCount * newStride, 0); // zero-initialize (cache-line-aligned)
 
 		auto it = std::find_if(mColumns.begin(), mColumns.end(),
 		                       [&newCol](const DataStoreColumnSchema& oldCol) { return oldCol.Name == newCol.Name; });
@@ -283,7 +321,7 @@ void DataStore::ConvertToSchema(const DataStoreSchema& newSchema)
 		{
 			size_t oldStride = it->GetStride();
 			size_t colIndex = std::distance(mColumns.begin(), it);
-			const std::vector<uint8_t>& oldData = mColumnsData[colIndex];
+			const ColumnBuffer& oldData = mColumnsData[colIndex];
 
 			for (size_t row = 0; row < rowCount; ++row)
 			{
@@ -463,6 +501,7 @@ void DataStore::InitializeColumns(size_t rows)
 	const size_t words = (rows + 63) / 64;
 	mValidBits.assign(words, 0);   // all rows start invalid (free)
 	mLockedBits.assign(words, 0);
+	mLodLevels.assign(rows, 0);    // every row starts at LOD 0 (highest fidelity)
 	mLiveCount = 0;
 	mAllocCursor = 0;
 }
