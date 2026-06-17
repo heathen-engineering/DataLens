@@ -10,6 +10,7 @@
 
 #include "datalens/DataStore.h"
 #include "datalens/DataLensSchema.h"
+#include "datalens/Lens.h"
 
 #include <string>
 #include <vector>
@@ -18,6 +19,8 @@ namespace
 {
     DataStore* AsStore(dl_store* s) { return reinterpret_cast<DataStore*>(s); }
     const DataStore* AsStore(const dl_store* s) { return reinterpret_cast<const DataStore*>(s); }
+    datalens::Lens* AsLens(dl_lens* l) { return reinterpret_cast<datalens::Lens*>(l); }
+    const datalens::Lens* AsLens(const dl_lens* l) { return reinterpret_cast<const datalens::Lens*>(l); }
 }
 
 extern "C" {
@@ -155,6 +158,40 @@ uint64_t dl_store_run_i32(dl_store* store, uint64_t targetCol, int32_t op, int32
 {
     if (!store) return 0;
     return AsStore(store)->RunColumnSystem<int32_t>(
+        static_cast<size_t>(targetCol), static_cast<DataSystemOp>(op), operand,
+        hasPredicate != 0, static_cast<size_t>(compareCol), static_cast<DataCompareOp>(cmp), threshold);
+}
+
+dl_lens* dl_lens_create(int32_t threadCount)
+{
+    const unsigned n = threadCount > 0 ? static_cast<unsigned>(threadCount) : 0u;
+    return reinterpret_cast<dl_lens*>(new datalens::Lens(n));
+}
+
+void dl_lens_destroy(dl_lens* lens)
+{
+    delete AsLens(lens);
+}
+
+int32_t dl_lens_thread_count(const dl_lens* lens)
+{
+    return lens ? static_cast<int32_t>(AsLens(lens)->ThreadCount()) : 0;
+}
+
+uint64_t dl_lens_run_f32(dl_lens* lens, dl_store* store, uint64_t targetCol, int32_t op, float operand,
+                         int32_t hasPredicate, uint64_t compareCol, int32_t cmp, float threshold)
+{
+    if (!lens || !store) return 0;
+    return AsLens(lens)->RunSystem<float>(*AsStore(store),
+        static_cast<size_t>(targetCol), static_cast<DataSystemOp>(op), operand,
+        hasPredicate != 0, static_cast<size_t>(compareCol), static_cast<DataCompareOp>(cmp), threshold);
+}
+
+uint64_t dl_lens_run_i32(dl_lens* lens, dl_store* store, uint64_t targetCol, int32_t op, int32_t operand,
+                         int32_t hasPredicate, uint64_t compareCol, int32_t cmp, int32_t threshold)
+{
+    if (!lens || !store) return 0;
+    return AsLens(lens)->RunSystem<int32_t>(*AsStore(store),
         static_cast<size_t>(targetCol), static_cast<DataSystemOp>(op), operand,
         hasPredicate != 0, static_cast<size_t>(compareCol), static_cast<DataCompareOp>(cmp), threshold);
 }

@@ -5,6 +5,9 @@ project(datalens VERSION 0.1.0 LANGUAGES CXX)
 option(DATALENS_BUILD_TESTS "Build the Catch2 test suite" ON)
 option(DATALENS_BUILD_BENCH "Build the Phase-0 benchmark"  ON)
 option(DATALENS_SANITIZERS  "Build with ASan + UBSan"       OFF)
+option(DATALENS_TSAN        "Build with ThreadSanitizer"    OFF)
+
+find_package(Threads REQUIRED)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -20,11 +23,13 @@ add_library(datalens_objects OBJECT
     src/DataLensSchema.cpp
     src/DataLens.cpp
     src/c_api.cpp
+    src/ThreadPool.cpp
     src/log.cpp)
 target_include_directories(datalens_objects PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
 target_compile_features(datalens_objects PUBLIC cxx_std_17)
+target_link_libraries(datalens_objects PUBLIC Threads::Threads)
 set_target_properties(datalens_objects PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 if(MSVC)
@@ -36,6 +41,11 @@ endif()
 if(DATALENS_SANITIZERS AND NOT MSVC)
     target_compile_options(datalens_objects PUBLIC -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(datalens_objects PUBLIC -fsanitize=address,undefined)
+endif()
+
+if(DATALENS_TSAN AND NOT MSVC)
+    target_compile_options(datalens_objects PUBLIC -fsanitize=thread -fno-omit-frame-pointer)
+    target_link_options(datalens_objects PUBLIC -fsanitize=thread)
 endif()
 
 # Static library (primary; used by tests/bench and native engine integrations).

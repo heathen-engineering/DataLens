@@ -185,10 +185,26 @@ public:
 	size_t RunColumnSystem(size_t targetCol, DataSystemOp op, T operand,
 	                       bool hasPredicate, size_t compareCol, DataCompareOp cmp, T threshold)
 	{
+		return RunColumnSystemChunk<T>(0, mRowCount, targetCol, op, operand,
+		                               hasPredicate, compareCol, cmp, threshold);
+	}
+
+	/// <summary>
+	/// Run a System over a disjoint row sub-range [rowBegin, rowEnd). Safe to call concurrently
+	/// from multiple threads on non-overlapping ranges (it writes only its own rows and reads
+	/// shared validity/predicate state). The Lens uses this to chunk a System across its threads.
+	/// </summary>
+	template <typename T>
+	size_t RunColumnSystemChunk(size_t rowBegin, size_t rowEnd,
+	                            size_t targetCol, DataSystemOp op, T operand,
+	                            bool hasPredicate, size_t compareCol, DataCompareOp cmp, T threshold)
+	{
 		if (targetCol >= mColumns.size())
 			return 0;
 		if (hasPredicate && compareCol >= mColumns.size())
 			return 0;
+		if (rowEnd > mRowCount)
+			rowEnd = mRowCount;
 
 		uint8_t* tcol = mColumnsData[targetCol].data();
 		const size_t tstride = mColumns[targetCol].GetStride();
@@ -196,7 +212,7 @@ public:
 		const size_t pstride = hasPredicate ? mColumns[compareCol].GetStride() : 0;
 
 		size_t affected = 0;
-		for (size_t r = 0; r < mRowCount; ++r)
+		for (size_t r = rowBegin; r < rowEnd; ++r)
 		{
 			const bool live = (mValidBits[r >> 6] >> (r & 63)) & 1ULL;
 

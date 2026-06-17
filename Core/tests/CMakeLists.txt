@@ -11,7 +11,8 @@ add_executable(datalens_tests
     test_schema.cpp
     test_view.cpp
     test_c_api.cpp
-    test_system.cpp)
+    test_system.cpp
+    test_lens.cpp)
 target_link_libraries(datalens_tests PRIVATE datalens Catch2::Catch2WithMain)
 
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)

@@ -82,6 +82,22 @@ DL_API uint64_t dl_store_run_f32(dl_store* store, uint64_t targetCol, int32_t op
 DL_API uint64_t dl_store_run_i32(dl_store* store, uint64_t targetCol, int32_t op, int32_t operand,
                                  int32_t hasPredicate, uint64_t compareCol, int32_t cmp, int32_t threshold);
 
+/* Lens (A3): owns a worker pool and RUNS Systems in parallel. dl_lens_create(0) uses
+ * hardware_concurrency. dl_lens_run_* parallelise the same System as dl_store_run_* across the
+ * Lens's threads, with identical results regardless of thread count. */
+typedef struct dl_lens dl_lens;
+
+DL_API dl_lens* dl_lens_create(int32_t threadCount);
+DL_API void     dl_lens_destroy(dl_lens* lens);
+DL_API int32_t  dl_lens_thread_count(const dl_lens* lens);
+
+DL_API uint64_t dl_lens_run_f32(dl_lens* lens, dl_store* store, uint64_t targetCol, int32_t op,
+                                float operand, int32_t hasPredicate, uint64_t compareCol, int32_t cmp,
+                                float threshold);
+DL_API uint64_t dl_lens_run_i32(dl_lens* lens, dl_store* store, uint64_t targetCol, int32_t op,
+                                int32_t operand, int32_t hasPredicate, uint64_t compareCol, int32_t cmp,
+                                int32_t threshold);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
