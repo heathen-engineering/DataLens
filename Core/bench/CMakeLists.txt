@@ -1,0 +1,2 @@
+add_executable(datalens_bench bench_phase0.cpp)
+target_link_libraries(datalens_bench PRIVATE datalens)

@@ -1,0 +1,7 @@
+# Lets clangd resolve datalens/*.h before a CMake build has produced
+# compile_commands.json. After configuring CMake (which exports
+# compile_commands.json), clangd will prefer that.
+CompileFlags:
+  Add:
+    - -std=c++17
+    - -I/home/loden/Dev/GitHub/DataLens/Core/include
