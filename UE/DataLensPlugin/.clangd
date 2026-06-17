@@ -1,0 +1,11 @@
+CompileFlags:
+  Add:
+    - -I/home/loden/UnrealEngine/Engine/Source
+    - -I/home/loden/UnrealEngine/Engine/Intermediate/Build/Linux/UE5/Inc
+    - -I/home/loden/UnrealEngine/Engine/Source/ThirdParty
+    - -I/usr/include/c++/13
+    - -I/usr/include/x86_64-linux-gnu/c++/13
+    - -I/usr/include/c++/13/backward
+    - -I/usr/lib/gcc/x86_64-linux-gnu/13/include
+    - -I/usr/include
+    - -std=c++17

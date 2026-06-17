@@ -1,0 +1,879 @@
+{
+	"folders": [
+		{
+			"name": "DataLensPlugin",
+			"path": "."
+		},
+		{
+			"name": "UE5",
+			"path": "/home/loden/UnrealEngine"
+		}
+	],
+	"settings": {
+		"typescript.tsc.autoDetect": "off",
+		"npm.autoDetect": "off",
+		"terminal.integrated.env.linux": {
+			"PATH": "/home/loden/UnrealEngine/Engine/Binaries/ThirdParty/DotNet/8.0.412/linux-x64:${env:PATH}",
+			"DOTNET_ROOT": "/home/loden/UnrealEngine/Engine/Binaries/ThirdParty/DotNet/8.0.412/linux-x64",
+			"DOTNET_HOST_PATH": "/home/loden/UnrealEngine/Engine/Binaries/ThirdParty/DotNet/8.0.412/linux-x64/dotnet",
+			"DOTNET_MULTILEVEL_LOOKUP": "0",
+			"DOTNET_ROLL_FORWARD": "LatestMajor"
+		}
+	},
+	"extensions": {
+		"recommendations": [
+			"ms-vscode.cpptools",
+			"ms-dotnettools.csharp"
+		]
+	},
+	"tasks": {
+		"version": "2.0.0",
+		"tasks": [
+			{
+				"label": "DataLensPlugin Linux Debug Build",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"Linux",
+					"Debug",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin Linux Debug Rebuild",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"Linux",
+					"Debug",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"dependsOn": [
+					"DataLensPlugin Linux Debug Clean"
+				],
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin Linux Debug Clean",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"Linux",
+					"Debug",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex",
+					"-clean"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin Linux DebugGame Build",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"Linux",
+					"DebugGame",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin Linux DebugGame Rebuild",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"Linux",
+					"DebugGame",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"dependsOn": [
+					"DataLensPlugin Linux DebugGame Clean"
+				],
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin Linux DebugGame Clean",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"Linux",
+					"DebugGame",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex",
+					"-clean"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin Linux Development Build",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"Linux",
+					"Development",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin Linux Development Rebuild",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"Linux",
+					"Development",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"dependsOn": [
+					"DataLensPlugin Linux Development Clean"
+				],
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin Linux Development Clean",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"Linux",
+					"Development",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex",
+					"-clean"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin Linux Test Build",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"Linux",
+					"Test",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin Linux Test Rebuild",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"Linux",
+					"Test",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"dependsOn": [
+					"DataLensPlugin Linux Test Clean"
+				],
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin Linux Test Clean",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"Linux",
+					"Test",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex",
+					"-clean"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin Linux Shipping Build",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"Linux",
+					"Shipping",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin Linux Shipping Rebuild",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"Linux",
+					"Shipping",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"dependsOn": [
+					"DataLensPlugin Linux Shipping Clean"
+				],
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin Linux Shipping Clean",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"Linux",
+					"Shipping",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex",
+					"-clean"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin LinuxArm64 Debug Build",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"LinuxArm64",
+					"Debug",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin LinuxArm64 Debug Rebuild",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"LinuxArm64",
+					"Debug",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"dependsOn": [
+					"DataLensPlugin LinuxArm64 Debug Clean"
+				],
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin LinuxArm64 Debug Clean",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"LinuxArm64",
+					"Debug",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex",
+					"-clean"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin LinuxArm64 DebugGame Build",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"LinuxArm64",
+					"DebugGame",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin LinuxArm64 DebugGame Rebuild",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"LinuxArm64",
+					"DebugGame",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"dependsOn": [
+					"DataLensPlugin LinuxArm64 DebugGame Clean"
+				],
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin LinuxArm64 DebugGame Clean",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"LinuxArm64",
+					"DebugGame",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex",
+					"-clean"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin LinuxArm64 Development Build",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"LinuxArm64",
+					"Development",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin LinuxArm64 Development Rebuild",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"LinuxArm64",
+					"Development",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"dependsOn": [
+					"DataLensPlugin LinuxArm64 Development Clean"
+				],
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin LinuxArm64 Development Clean",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"LinuxArm64",
+					"Development",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex",
+					"-clean"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin LinuxArm64 Test Build",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"LinuxArm64",
+					"Test",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin LinuxArm64 Test Rebuild",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"LinuxArm64",
+					"Test",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"dependsOn": [
+					"DataLensPlugin LinuxArm64 Test Clean"
+				],
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin LinuxArm64 Test Clean",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"LinuxArm64",
+					"Test",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex",
+					"-clean"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin LinuxArm64 Shipping Build",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"LinuxArm64",
+					"Shipping",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin LinuxArm64 Shipping Rebuild",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"LinuxArm64",
+					"Shipping",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"dependsOn": [
+					"DataLensPlugin LinuxArm64 Shipping Clean"
+				],
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPlugin LinuxArm64 Shipping Clean",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPlugin",
+					"LinuxArm64",
+					"Shipping",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex",
+					"-clean"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPluginEditor Linux Debug Build",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPluginEditor",
+					"Linux",
+					"Debug",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPluginEditor Linux Debug Rebuild",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPluginEditor",
+					"Linux",
+					"Debug",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"dependsOn": [
+					"DataLensPluginEditor Linux Debug Clean"
+				],
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPluginEditor Linux Debug Clean",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPluginEditor",
+					"Linux",
+					"Debug",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex",
+					"-clean"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPluginEditor Linux DebugGame Build",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPluginEditor",
+					"Linux",
+					"DebugGame",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPluginEditor Linux DebugGame Rebuild",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPluginEditor",
+					"Linux",
+					"DebugGame",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"dependsOn": [
+					"DataLensPluginEditor Linux DebugGame Clean"
+				],
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPluginEditor Linux DebugGame Clean",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPluginEditor",
+					"Linux",
+					"DebugGame",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex",
+					"-clean"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPluginEditor Linux Development Build",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPluginEditor",
+					"Linux",
+					"Development",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPluginEditor Linux Development Rebuild",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPluginEditor",
+					"Linux",
+					"Development",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex"
+				],
+				"problemMatcher": "$msCompile",
+				"dependsOn": [
+					"DataLensPluginEditor Linux Development Clean"
+				],
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			},
+			{
+				"label": "DataLensPluginEditor Linux Development Clean",
+				"group": "build",
+				"command": "Engine/Build/BatchFiles/Linux/Build.sh",
+				"args": [
+					"DataLensPluginEditor",
+					"Linux",
+					"Development",
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-waitmutex",
+					"-clean"
+				],
+				"problemMatcher": "$msCompile",
+				"type": "shell",
+				"options": {
+					"cwd": "/home/loden/UnrealEngine"
+				}
+			}
+		]
+	},
+	"launch": {
+		"version": "0.2.0",
+		"configurations": [
+			{
+				"name": "Launch DataLensPlugin (Debug)",
+				"request": "launch",
+				"program": "/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/Binaries/Linux/DataLensPlugin-Linux-Debug",
+				"preLaunchTask": "DataLensPlugin Linux Debug Build",
+				"args": [
+				],
+				"cwd": "/home/loden/UnrealEngine",
+				"type": "cppdbg",
+				"visualizerFile": "/home/loden/UnrealEngine/Engine/Extras/VisualStudioDebugging/Unreal.natvis",
+				"showDisplayString": true
+			},
+			{
+				"name": "Launch DataLensPlugin (DebugGame)",
+				"request": "launch",
+				"program": "/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/Binaries/Linux/DataLensPlugin-Linux-DebugGame",
+				"preLaunchTask": "DataLensPlugin Linux DebugGame Build",
+				"args": [
+				],
+				"cwd": "/home/loden/UnrealEngine",
+				"type": "cppdbg",
+				"visualizerFile": "/home/loden/UnrealEngine/Engine/Extras/VisualStudioDebugging/Unreal.natvis",
+				"showDisplayString": true
+			},
+			{
+				"name": "Launch DataLensPlugin (Development)",
+				"request": "launch",
+				"program": "/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/Binaries/Linux/DataLensPlugin",
+				"preLaunchTask": "DataLensPlugin Linux Development Build",
+				"args": [
+				],
+				"cwd": "/home/loden/UnrealEngine",
+				"type": "cppdbg",
+				"visualizerFile": "/home/loden/UnrealEngine/Engine/Extras/VisualStudioDebugging/Unreal.natvis",
+				"showDisplayString": true
+			},
+			{
+				"name": "Launch DataLensPlugin (Test)",
+				"request": "launch",
+				"program": "/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/Binaries/Linux/DataLensPlugin-Linux-Test",
+				"preLaunchTask": "DataLensPlugin Linux Test Build",
+				"args": [
+				],
+				"cwd": "/home/loden/UnrealEngine",
+				"type": "cppdbg",
+				"visualizerFile": "/home/loden/UnrealEngine/Engine/Extras/VisualStudioDebugging/Unreal.natvis",
+				"showDisplayString": true
+			},
+			{
+				"name": "Launch DataLensPlugin (Shipping)",
+				"request": "launch",
+				"program": "/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/Binaries/Linux/DataLensPlugin-Linux-Shipping",
+				"preLaunchTask": "DataLensPlugin Linux Shipping Build",
+				"args": [
+				],
+				"cwd": "/home/loden/UnrealEngine",
+				"type": "cppdbg",
+				"visualizerFile": "/home/loden/UnrealEngine/Engine/Extras/VisualStudioDebugging/Unreal.natvis",
+				"showDisplayString": true
+			},
+			{
+				"name": "Launch DataLensPluginEditor (Debug)",
+				"request": "launch",
+				"program": "/home/loden/UnrealEngine/Engine/Binaries/Linux/UnrealEditor-Linux-Debug",
+				"preLaunchTask": "DataLensPluginEditor Linux Debug Build",
+				"args": [
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject"
+				],
+				"cwd": "/home/loden/UnrealEngine",
+				"type": "cppdbg",
+				"visualizerFile": "/home/loden/UnrealEngine/Engine/Extras/VisualStudioDebugging/Unreal.natvis",
+				"showDisplayString": true
+			},
+			{
+				"name": "Launch DataLensPluginEditor (DebugGame)",
+				"request": "launch",
+				"program": "/home/loden/UnrealEngine/Engine/Binaries/Linux/UnrealEditor-Linux-DebugGame",
+				"preLaunchTask": "DataLensPluginEditor Linux DebugGame Build",
+				"args": [
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject"
+				],
+				"cwd": "/home/loden/UnrealEngine",
+				"type": "cppdbg",
+				"visualizerFile": "/home/loden/UnrealEngine/Engine/Extras/VisualStudioDebugging/Unreal.natvis",
+				"showDisplayString": true
+			},
+			{
+				"name": "Launch DataLensPluginEditor (Development)",
+				"request": "launch",
+				"program": "/home/loden/UnrealEngine/Engine/Binaries/Linux/UnrealEditor",
+				"preLaunchTask": "DataLensPluginEditor Linux Development Build",
+				"args": [
+					"/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject"
+				],
+				"cwd": "/home/loden/UnrealEngine",
+				"type": "cppdbg",
+				"visualizerFile": "/home/loden/UnrealEngine/Engine/Extras/VisualStudioDebugging/Unreal.natvis",
+				"showDisplayString": true
+			},
+			{
+				"name": "Generate Project Files",
+				"type": "coreclr",
+				"request": "launch",
+				"preLaunchTask": "UnrealBuildTool Linux Development Build",
+				"program": "/home/loden/UnrealEngine/Engine/Build/BatchFiles/RunUBT.bat",
+				"args": [
+					"-projectfiles",
+					"-vscode",
+					"-project=/home/loden/Dev/GitHub/DataLens/UE/DataLensPlugin/DataLensPlugin.uproject",
+					"-game",
+					"-engine",
+					"-dotnet"
+				],
+				"env": {
+					"PATH": "/home/loden/UnrealEngine/Engine/Binaries/ThirdParty/DotNet/8.0.412/linux-x64:${env:PATH}",
+					"DOTNET_ROOT": "/home/loden/UnrealEngine/Engine/Binaries/ThirdParty/DotNet/8.0.412/linux-x64",
+					"DOTNET_HOST_PATH": "/home/loden/UnrealEngine/Engine/Binaries/ThirdParty/DotNet/8.0.412/linux-x64/dotnet",
+					"DOTNET_MULTILEVEL_LOOKUP": "0",
+					"DOTNET_ROLL_FORWARD": "LatestMajor"
+				},
+				"console": "internalConsole",
+				"internalConsoleOptions": "openOnSessionStart",
+				"stopAtEntry": false,
+				"cwd": "/home/loden/UnrealEngine"
+			}
+		]
+	}
+}
