@@ -1,0 +1,83 @@
+name: DataLens Core
+
+on:
+  push:
+    paths: ['Core/**', '.github/workflows/core.yml']
+  pull_request:
+    paths: ['Core/**', '.github/workflows/core.yml']
+
+jobs:
+  build-test:
+    name: ${{ matrix.compiler }} / ${{ matrix.build_type }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        build_type: [Debug, Release]
+        include:
+          - compiler: gcc
+            cc: gcc
+            cxx: g++
+          - compiler: clang
+            cc: clang
+            cxx: clang++
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build clang
+      - name: Configure
+        env: { CC: ${{ matrix.cc }}, CXX: ${{ matrix.cxx }} }
+        run: cmake -S Core -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  sanitizers:
+    name: clang / ASan+UBSan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build clang
+      - name: Configure
+        env: { CC: clang, CXX: clang++ }
+        run: cmake -S Core -B build-asan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DDATALENS_SANITIZERS=ON -DDATALENS_BUILD_BENCH=OFF
+      - name: Build
+        run: cmake --build build-asan
+      - name: Test (sanitized)
+        run: ctest --test-dir build-asan --output-on-failure
+
+  thread-sanitizer:
+    name: clang / ThreadSanitizer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build clang
+      - name: Configure
+        env: { CC: clang, CXX: clang++ }
+        run: cmake -S Core -B build-tsan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DDATALENS_TSAN=ON -DDATALENS_BUILD_BENCH=OFF
+      - name: Build
+        run: cmake --build build-tsan
+      - name: Test (thread-sanitized)
+        run: ctest --test-dir build-tsan --output-on-failure
+
+  benchmark:
+    name: benchmark (informational)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
+      - name: Configure
+        run: cmake -S Core -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDATALENS_BUILD_TESTS=OFF
+      - name: Build
+        run: cmake --build build
+      - name: Run benchmark
+        run: ./build/bench/datalens_bench phase0.csv && cat phase0.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase0-benchmark
+          path: phase0.csv
