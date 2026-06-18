@@ -61,6 +61,13 @@ add_library(datalens_shared SHARED $<TARGET_OBJECTS:datalens_objects>)
 target_link_libraries(datalens_shared PUBLIC datalens_objects)
 set_target_properties(datalens_shared PROPERTIES OUTPUT_NAME datalens)
 
+# On Windows the DLL must be named exactly "datalens.dll" (no "lib" prefix) so Unity's
+# [DllImport("datalens")] resolves it; MinGW would otherwise emit "libdatalens.dll". Linux keeps
+# the "lib" prefix (libdatalens.so), which Unity resolves fine.
+if(WIN32)
+    set_target_properties(datalens_shared PROPERTIES PREFIX "")
+endif()
+
 # ── Install / export ─────────────────────────────────────────────────────────
 include(GNUInstallDirs)
 install(TARGETS datalens datalens_shared datalens_objects
