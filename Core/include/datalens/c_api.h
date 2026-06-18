@@ -131,6 +131,38 @@ DL_API uint64_t dl_lens_run_curved_i32(dl_lens* lens, dl_store* store, uint64_t 
                                        float curveP0, float curveP1, int32_t curveInvert,
                                        int32_t hasPredicate, uint64_t compareCol, int32_t cmp, int32_t threshold);
 
+/* Counter-based noise (A3.12): noise = noiseLo + (noiseHi-noiseLo)*u01(row,tick,seed), a stateless PRNG
+ * keyed on the GLOBAL row index (reproducible across runs/machines/replay; serial==parallel). The fill
+ * form does `targetCol = targetCol OP noise` (op Set fills a noise column, Add jitters an accumulator).
+ * The perturb form does `targetCol = targetCol OP (operandCol[r]*noise)` — the HATE §8.4
+ * `Score += Variance*Noise` in one pass (Variance 0 rows unchanged). Numeric ops only. */
+DL_API uint64_t dl_lens_run_noise_f32(dl_lens* lens, dl_store* store, uint64_t targetCol, int32_t op,
+                                      float noiseLo, float noiseHi, uint64_t seed, uint64_t tick,
+                                      int32_t hasPredicate, uint64_t compareCol, int32_t cmp, float threshold);
+DL_API uint64_t dl_lens_run_noise_i32(dl_lens* lens, dl_store* store, uint64_t targetCol, int32_t op,
+                                      int32_t noiseLo, int32_t noiseHi, uint64_t seed, uint64_t tick,
+                                      int32_t hasPredicate, uint64_t compareCol, int32_t cmp, int32_t threshold);
+DL_API uint64_t dl_lens_run_noise_perturb_f32(dl_lens* lens, dl_store* store, uint64_t targetCol, int32_t op,
+                                              uint64_t operandCol, float noiseLo, float noiseHi, uint64_t seed,
+                                              uint64_t tick, int32_t hasPredicate, uint64_t compareCol,
+                                              int32_t cmp, float threshold);
+DL_API uint64_t dl_lens_run_noise_perturb_i32(dl_lens* lens, dl_store* store, uint64_t targetCol, int32_t op,
+                                              uint64_t operandCol, int32_t noiseLo, int32_t noiseHi, uint64_t seed,
+                                              uint64_t tick, int32_t hasPredicate, uint64_t compareCol,
+                                              int32_t cmp, int32_t threshold);
+
+/* Argmax-across-columns (A3.13): reduce `scoreColCount` score columns to the index of the per-row max,
+ * written into `choiceCol` (an Int32 column) — the HATE §8.5 selection "pick". Ties resolve to the lowest
+ * index; a winning score below `minScore` writes the `noChoice` sentinel (e.g. -1 = do nothing, composing
+ * with the §8.5 Command override). `scoreCols` points to `scoreColCount` column indices (max 64).
+ * Returns rows written. */
+DL_API uint64_t dl_lens_run_argmax_f32(dl_lens* lens, dl_store* store, uint64_t choiceCol,
+                                       const uint64_t* scoreCols, uint64_t scoreColCount,
+                                       float minScore, int32_t noChoice);
+DL_API uint64_t dl_lens_run_argmax_i32(dl_lens* lens, dl_store* store, uint64_t choiceCol,
+                                       const uint64_t* scoreCols, uint64_t scoreColCount,
+                                       int32_t minScore, int32_t noChoice);
+
 /* Batched Systems (A3.4): a data-described System the Lens can schedule. The Lens runs a whole
  * array of these in one call, executing non-conflicting Systems concurrently while preserving
  * deterministic submission order for conflicting ones (see dl_lens_run_batch).

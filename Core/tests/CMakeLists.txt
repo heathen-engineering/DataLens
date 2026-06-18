@@ -13,6 +13,8 @@ add_executable(datalens_tests
     test_c_api.cpp
     test_system.cpp
     test_curve.cpp
+    test_noise.cpp
+    test_argmax.cpp
     test_lens.cpp
     test_ir.cpp
     test_schedule.cpp

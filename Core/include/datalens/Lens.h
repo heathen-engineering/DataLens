@@ -234,6 +234,67 @@ namespace datalens
             return affected.load(std::memory_order_relaxed);
         }
 
+        /// Counter-based noise fill (A3.12), parallelised across the pool. `target = target OP noise`,
+        /// noise = lo + (hi-lo)*u01(row, tick, seed). The PRNG keys on the GLOBAL row index, so the
+        /// chunked result is byte-identical to a serial run. The §8.4 variance term.
+        template <typename T>
+        std::size_t RunSystemNoiseColumn(DataStore& store, std::size_t targetCol, DataSystemOp op,
+                                         T noiseLo, T noiseHi, std::uint64_t seed, std::uint64_t tick,
+                                         bool hasPredicate, std::size_t compareCol, DataCompareOp cmp, T threshold)
+        {
+            const std::size_t rows = store.GetRowCount();
+            std::atomic<std::size_t> affected{0};
+
+            mPool.ParallelFor(rows, kMinChunk, [&](std::size_t begin, std::size_t end) {
+                const std::size_t a = store.RunNoiseColumnChunk<T>(
+                    begin, end, targetCol, op, noiseLo, noiseHi, seed, tick, hasPredicate, compareCol, cmp, threshold);
+                affected.fetch_add(a, std::memory_order_relaxed);
+            });
+
+            return affected.load(std::memory_order_relaxed);
+        }
+
+        /// Counter-based noise perturb (A3.12 / §8.4), parallelised: `target = target OP (operandCol[r] *
+        /// noise)` — the `Score += Variance * Noise` primitive. Same chunk-invariant, reproducible PRNG.
+        template <typename T>
+        std::size_t RunSystemNoisePerturbColumn(DataStore& store, std::size_t targetCol, DataSystemOp op,
+                                                std::size_t operandCol, T noiseLo, T noiseHi,
+                                                std::uint64_t seed, std::uint64_t tick,
+                                                bool hasPredicate, std::size_t compareCol, DataCompareOp cmp, T threshold)
+        {
+            const std::size_t rows = store.GetRowCount();
+            std::atomic<std::size_t> affected{0};
+
+            mPool.ParallelFor(rows, kMinChunk, [&](std::size_t begin, std::size_t end) {
+                const std::size_t a = store.RunNoisePerturbColumnChunk<T>(
+                    begin, end, targetCol, op, operandCol, noiseLo, noiseHi, seed, tick,
+                    hasPredicate, compareCol, cmp, threshold);
+                affected.fetch_add(a, std::memory_order_relaxed);
+            });
+
+            return affected.load(std::memory_order_relaxed);
+        }
+
+        /// Argmax-across-columns (A3.13), parallelised: reduce K score columns to a Choice index column —
+        /// the §8.5 AI selection "pick". Ties to the lowest index; a winning score below `minScore` writes
+        /// `noChoice`. Each row is independent, so the chunked result is identical to a serial run.
+        template <typename T>
+        std::size_t RunSystemArgmaxColumns(DataStore& store, std::size_t choiceCol,
+                                           const std::size_t* scoreCols, std::size_t scoreColCount,
+                                           T minScore, std::int32_t noChoice)
+        {
+            const std::size_t rows = store.GetRowCount();
+            std::atomic<std::size_t> written{0};
+
+            mPool.ParallelFor(rows, kMinChunk, [&](std::size_t begin, std::size_t end) {
+                const std::size_t w = store.RunArgmaxColumnsChunk<T>(
+                    begin, end, choiceCol, scoreCols, scoreColCount, minScore, noChoice);
+                written.fetch_add(w, std::memory_order_relaxed);
+            });
+
+            return written.load(std::memory_order_relaxed);
+        }
+
         /// Run a batch of data-described Systems (across any number of stores) in one call and return
         /// the total rows affected. The Lens assigns each System a dependency LEVEL — one past the
         /// highest level of any earlier System it conflicts with (a write/read hazard on the same

@@ -460,6 +460,170 @@ public:
 	}
 
 	/// <summary>
+	/// Counter-based noise fill (DataLens-Spec A3.12): each live row gets `targetCol = targetCol OP noise`,
+	/// where `noise = noiseLo + (noiseHi-noiseLo) * u01(row, tick, seed)` and `u01` is a STATELESS
+	/// counter-based PRNG (no global RNG). Because the value depends only on the global row index, the
+	/// tick and the seed, results are reproducible across runs, machines and replay (and identical whether
+	/// run serially or chunked across the Lens pool). The perturb term of HATE-Spec §8.4: with op Set this
+	/// fills a noise column; with op Add it jitters an accumulator (`Score += noise`). Returns rows affected.
+	/// </summary>
+	template <typename T>
+	size_t RunNoiseColumn(size_t targetCol, DataSystemOp op, T noiseLo, T noiseHi, uint64_t seed, uint64_t tick,
+	                      bool hasPredicate = false, size_t compareCol = 0,
+	                      DataCompareOp cmp = DataCompareOp::Always, T threshold = T{})
+	{
+		return RunNoiseColumnChunk<T>(0, mRowCount, targetCol, op, noiseLo, noiseHi, seed, tick,
+		                              hasPredicate, compareCol, cmp, threshold);
+	}
+
+	/// <summary>Disjoint sub-range form of <see cref="RunNoiseColumn"/> (used by the Lens). The noise per
+	/// row is keyed on the GLOBAL row index, so any [rowBegin,rowEnd) chunking yields identical results.</summary>
+	template <typename T>
+	size_t RunNoiseColumnChunk(size_t rowBegin, size_t rowEnd, size_t targetCol, DataSystemOp op,
+	                           T noiseLo, T noiseHi, uint64_t seed, uint64_t tick,
+	                           bool hasPredicate, size_t compareCol, DataCompareOp cmp, T threshold)
+	{
+		if (targetCol >= mColumns.size())
+			return 0;
+		if (hasPredicate && compareCol >= mColumns.size())
+			return 0;
+		if (rowEnd > mRowCount)
+			rowEnd = mRowCount;
+		return RunNoiseColumnChunkImpl<T, false>(rowBegin, rowEnd, targetCol, op, 0, noiseLo, noiseHi, seed, tick,
+		                                         hasPredicate, compareCol, cmp, threshold);
+	}
+
+	/// <summary>
+	/// Counter-based noise PERTURB (DataLens-Spec A3.12 / HATE-Spec §8.4): `targetCol = targetCol OP
+	/// (operandCol[r] * noise)`, with `noise = noiseLo + (noiseHi-noiseLo) * u01(row, tick, seed)`. This is
+	/// the headline perturb `Score' = Score + Variance * Noise` in one branchless pass when operandCol is
+	/// the per-actor Variance column and op is Add: rows whose Variance is 0 are unchanged (perfect play),
+	/// higher Variance is increasingly stochastic. Same stateless, reproducible, chunk-invariant PRNG as
+	/// <see cref="RunNoiseColumn"/>. Returns rows affected.
+	/// </summary>
+	template <typename T>
+	size_t RunNoisePerturbColumn(size_t targetCol, DataSystemOp op, size_t operandCol,
+	                             T noiseLo, T noiseHi, uint64_t seed, uint64_t tick,
+	                             bool hasPredicate = false, size_t compareCol = 0,
+	                             DataCompareOp cmp = DataCompareOp::Always, T threshold = T{})
+	{
+		return RunNoisePerturbColumnChunk<T>(0, mRowCount, targetCol, op, operandCol, noiseLo, noiseHi, seed, tick,
+		                                     hasPredicate, compareCol, cmp, threshold);
+	}
+
+	/// <summary>Disjoint sub-range form of <see cref="RunNoisePerturbColumn"/> (used by the Lens).</summary>
+	template <typename T>
+	size_t RunNoisePerturbColumnChunk(size_t rowBegin, size_t rowEnd, size_t targetCol, DataSystemOp op,
+	                                  size_t operandCol, T noiseLo, T noiseHi, uint64_t seed, uint64_t tick,
+	                                  bool hasPredicate, size_t compareCol, DataCompareOp cmp, T threshold)
+	{
+		if (targetCol >= mColumns.size() || operandCol >= mColumns.size())
+			return 0;
+		if (hasPredicate && compareCol >= mColumns.size())
+			return 0;
+		if (rowEnd > mRowCount)
+			rowEnd = mRowCount;
+		return RunNoiseColumnChunkImpl<T, true>(rowBegin, rowEnd, targetCol, op, operandCol, noiseLo, noiseHi,
+		                                        seed, tick, hasPredicate, compareCol, cmp, threshold);
+	}
+
+	/// <summary>
+	/// Argmax-across-columns (DataLens-Spec A3.13): the §8.5 selection "pick". For each live row, reduce
+	/// the K score columns to the INDEX of the largest score and write it into <paramref name="choiceCol"/>
+	/// (an Int32 column). Ties resolve to the LOWEST index (strict greater-than) so the choice is
+	/// deterministic. If the winning score is below <paramref name="minScore"/> the row gets
+	/// <paramref name="noChoice"/> (a sentinel, e.g. -1 = "do nothing"), which composes with the §8.5
+	/// `Choice = Command>=0 ? Command : pick` override. K=0 writes <paramref name="noChoice"/> everywhere.
+	/// Returns rows written. One branchless reduction pass — the AI selection step at column speed.
+	/// </summary>
+	template <typename T>
+	size_t RunArgmaxColumns(size_t choiceCol, const size_t* scoreCols, size_t scoreColCount,
+	                        T minScore, int32_t noChoice)
+	{
+		return RunArgmaxColumnsChunk<T>(0, mRowCount, choiceCol, scoreCols, scoreColCount, minScore, noChoice);
+	}
+
+	/// <summary>Disjoint sub-range form of <see cref="RunArgmaxColumns"/> (used by the Lens). Each row is
+	/// independent, so any [rowBegin,rowEnd) chunking yields identical results.</summary>
+	// A utility-AI actor rarely chooses between more than a few dozen candidate abilities; a fixed cap
+	// lets us hoist the score-column base pointers onto the stack (no per-row column lookups) and keeps
+	// the reduction allocation-free on the parallel hot path.
+	static constexpr size_t kMaxArgmaxColumns = 64;
+
+	template <typename T>
+	size_t RunArgmaxColumnsChunk(size_t rowBegin, size_t rowEnd, size_t choiceCol,
+	                             const size_t* scoreCols, size_t scoreColCount, T minScore, int32_t noChoice)
+	{
+		if (choiceCol >= mColumns.size() || scoreColCount > kMaxArgmaxColumns)
+			return 0;
+		for (size_t k = 0; k < scoreColCount; ++k)
+			if (scoreCols[k] >= mColumns.size())
+				return 0;
+		if (rowEnd > mRowCount)
+			rowEnd = mRowCount;
+
+		// Hoist the score-column bases/strides out of the row loop.
+		const uint8_t* sbase[kMaxArgmaxColumns];
+		size_t sstride[kMaxArgmaxColumns];
+		for (size_t k = 0; k < scoreColCount; ++k)
+		{
+			sbase[k] = mColumnsData[scoreCols[k]].data();
+			sstride[k] = mColumns[scoreCols[k]].GetStride();
+		}
+		uint8_t* cchoice = mColumnsData[choiceCol].data();
+		const size_t cstride = mColumns[choiceCol].GetStride();
+
+		size_t written = 0;
+		for (size_t r = rowBegin; r < rowEnd; ++r)
+		{
+			const bool live = (mValidBits[r >> 6] >> (r & 63)) & 1ULL;
+
+			int32_t choice = noChoice;
+			if (scoreColCount > 0)
+			{
+				size_t bestIdx = 0;
+				T bestVal;
+				std::memcpy(&bestVal, sbase[0] + r * sstride[0], sizeof(T));
+				for (size_t k = 1; k < scoreColCount; ++k)
+				{
+					T v;
+					std::memcpy(&v, sbase[k] + r * sstride[k], sizeof(T));
+					if (v > bestVal) { bestVal = v; bestIdx = k; } // strict > keeps the lowest index on a tie
+				}
+				choice = (bestVal >= minScore) ? static_cast<int32_t>(bestIdx) : noChoice;
+			}
+
+			int32_t cur;
+			std::memcpy(&cur, cchoice + r * cstride, sizeof(int32_t));
+			const int32_t result = live ? choice : cur; // select write-back: leave dead rows untouched
+			std::memcpy(cchoice + r * cstride, &result, sizeof(int32_t));
+			written += live ? 1u : 0u;
+		}
+		return written;
+	}
+
+	/// <summary>SplitMix64 finaliser — a fast, well-distributed integer hash. The stateless counter-based
+	/// PRNG core for <see cref="Noise01"/> (DataLens-Spec A3.12).</summary>
+	static uint64_t SplitMix64(uint64_t z)
+	{
+		z += 0x9E3779B97F4A7C15ULL;
+		z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+		z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+		return z ^ (z >> 31);
+	}
+
+	/// <summary>Counter-based PRNG: a uniform value in [0,1) keyed on (row, tick, seed) with no global
+	/// state, so it is reproducible across runs, machines and replay, and identical regardless of how the
+	/// row range is chunked across worker threads (the key is the GLOBAL row index). The top 24 bits feed
+	/// a float, giving exact representability of every step in [0,1). Public so callers can predict/verify
+	/// the noise a noise System will apply.</summary>
+	static float Noise01(uint64_t row, uint64_t tick, uint64_t seed)
+	{
+		const uint64_t h = SplitMix64(seed ^ SplitMix64(row ^ SplitMix64(tick)));
+		return static_cast<float>(h >> 40) * (1.0f / 16777216.0f); // (h>>40) in [0, 2^24) -> [0,1)
+	}
+
+	/// <summary>
 	/// Total bytes per row (sum of all column strides).
 	/// </summary>
 	/// <returns></returns>
@@ -512,6 +676,74 @@ private:
 		y = y < 0.0f ? 0.0f : (y > 1.0f ? 1.0f : y);
 		if (c.invert) y = 1.0f - y;
 		return y;
+	}
+
+	/// <summary>
+	/// Counter-based noise kernel (DataLens-Spec A3.12). Per live row r passing the optional same-type
+	/// predicate: `noise = noiseLo + (noiseHi-noiseLo) * Noise01(r, tick, seed)`; the right-hand side is
+	/// `operandCol[r] * noise` when <c>OperandIsColumn</c> (the §8.4 perturb, e.g. Variance * Noise) or
+	/// `noise` itself otherwise (a fill); then `target = target OP rhs` via a select write-back. Numeric
+	/// ops only (Set/Add/Sub/Mul/Min/Max) — noise on a bitmask column is meaningless. The dead operand-source
+	/// branch is eliminated at compile time, so the hot loop is branch-free on operand source.
+	/// </summary>
+	template <typename T, bool OperandIsColumn>
+	size_t RunNoiseColumnChunkImpl(size_t rowBegin, size_t rowEnd, size_t targetCol, DataSystemOp op,
+	                               size_t operandCol, T noiseLo, T noiseHi, uint64_t seed, uint64_t tick,
+	                               bool hasPredicate, size_t compareCol, DataCompareOp cmp, T threshold)
+	{
+		uint8_t* tcol = mColumnsData[targetCol].data();
+		const size_t tstride = mColumns[targetCol].GetStride();
+		const uint8_t* ocol = OperandIsColumn ? mColumnsData[operandCol].data() : nullptr;
+		const size_t ostride = OperandIsColumn ? mColumns[operandCol].GetStride() : 0;
+		const uint8_t* pcol = hasPredicate ? mColumnsData[compareCol].data() : nullptr;
+		const size_t pstride = hasPredicate ? mColumns[compareCol].GetStride() : 0;
+		const float span = static_cast<float>(noiseHi) - static_cast<float>(noiseLo);
+
+		size_t affected = 0;
+		for (size_t r = rowBegin; r < rowEnd; ++r)
+		{
+			const bool live = (mValidBits[r >> 6] >> (r & 63)) & 1ULL;
+
+			T cur;
+			std::memcpy(&cur, tcol + r * tstride, sizeof(T));
+
+			const float noise = static_cast<float>(noiseLo) + span * Noise01(r, tick, seed);
+			T rhs;
+			if (OperandIsColumn)
+			{
+				T operand;
+				std::memcpy(&operand, ocol + r * ostride, sizeof(T));
+				rhs = static_cast<T>(static_cast<float>(operand) * noise);
+			}
+			else
+				rhs = static_cast<T>(noise);
+
+			T computed;
+			switch (op)
+			{
+			case DataSystemOp::Set: computed = rhs; break;
+			case DataSystemOp::Add: computed = static_cast<T>(cur + rhs); break;
+			case DataSystemOp::Sub: computed = static_cast<T>(cur - rhs); break;
+			case DataSystemOp::Mul: computed = static_cast<T>(cur * rhs); break;
+			case DataSystemOp::Min: computed = cur < rhs ? cur : rhs; break;
+			case DataSystemOp::Max: computed = cur > rhs ? cur : rhs; break;
+			default:                computed = cur; break; // bitwise ops are undefined for noise
+			}
+
+			bool match = true;
+			if (hasPredicate)
+			{
+				T pv;
+				std::memcpy(&pv, pcol + r * pstride, sizeof(T));
+				match = ComparePredicate<T>(pv, cmp, threshold);
+			}
+
+			const bool apply = live && match;
+			const T result = apply ? computed : cur; // select write-back (lowers to cmov)
+			std::memcpy(tcol + r * tstride, &result, sizeof(T));
+			affected += apply ? 1u : 0u;
+		}
+		return affected;
 	}
 
 	template <typename P>

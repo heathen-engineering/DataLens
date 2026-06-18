@@ -163,6 +163,71 @@ TEST_CASE("c_api: curved cross-column System via the Lens (A3.11)", "[c_api]")
     dl_store_destroy(s);
 }
 
+TEST_CASE("c_api: counter-based noise fill + perturb via the Lens (A3.12)", "[c_api]")
+{
+    const char* names[] = {"Score", "Variance"};
+    const int32_t types[] = {kFloat, kFloat};
+    dl_store* s = dl_store_create(names, types, 2, 4);
+    REQUIRE(s != nullptr);
+
+    uint64_t r0 = dl_store_alloc_row(s); dl_store_set_f32(s, r0, 0, 10.0f); dl_store_set_f32(s, r0, 1, 0.0f);
+    uint64_t r1 = dl_store_alloc_row(s); dl_store_set_f32(s, r1, 0, 10.0f); dl_store_set_f32(s, r1, 1, 2.0f);
+
+    dl_lens* lens = dl_lens_create(4);
+    REQUIRE(lens != nullptr);
+
+    // Fill Score with noise in [0,1): op=0 Set, seed=42, tick=1, no predicate.
+    uint64_t n = dl_lens_run_noise_f32(lens, s, /*target*/0, /*op*/0, /*lo*/0.0f, /*hi*/1.0f,
+                                       /*seed*/42, /*tick*/1, /*hasPred*/0, /*cmpCol*/0, /*cmp*/0, /*thr*/0.0f);
+    REQUIRE(n == 2);
+    float f = -1.0f;
+    dl_store_get_f32(s, r0, 0, &f); REQUIRE(f >= 0.0f); REQUIRE(f < 1.0f);
+
+    // Perturb: Score += Variance * noise (op=1 Add). Reset scores first.
+    dl_store_set_f32(s, r0, 0, 10.0f);
+    dl_store_set_f32(s, r1, 0, 10.0f);
+    n = dl_lens_run_noise_perturb_f32(lens, s, /*target*/0, /*op*/1, /*operandCol*/1,
+                                      /*lo*/0.0f, /*hi*/1.0f, /*seed*/42, /*tick*/1,
+                                      /*hasPred*/0, /*cmpCol*/0, /*cmp*/0, /*thr*/0.0f);
+    REQUIRE(n == 2);
+    dl_store_get_f32(s, r0, 0, &f); REQUIRE(f == 10.0f); // Variance 0 -> unchanged
+    dl_store_get_f32(s, r1, 0, &f); REQUIRE(f >= 10.0f); REQUIRE(f < 12.0f); // 10 + [0,2)
+
+    REQUIRE(dl_lens_run_noise_f32(nullptr, s, 0, 0, 0.f, 1.f, 0, 0, 0, 0, 0, 0.f) == 0);
+
+    dl_lens_destroy(lens);
+    dl_store_destroy(s);
+}
+
+TEST_CASE("c_api: argmax-across-columns via the Lens (A3.13)", "[c_api]")
+{
+    const char* names[] = {"S0", "S1", "S2", "Choice"};
+    const int32_t types[] = {kFloat, kFloat, kFloat, kInt32};
+    dl_store* s = dl_store_create(names, types, 4, 3);
+    REQUIRE(s != nullptr);
+
+    uint64_t r0 = dl_store_alloc_row(s); dl_store_set_f32(s, r0, 0, 0.9f); dl_store_set_f32(s, r0, 1, 0.1f); dl_store_set_f32(s, r0, 2, 0.3f);
+    uint64_t r1 = dl_store_alloc_row(s); dl_store_set_f32(s, r1, 0, 0.1f); dl_store_set_f32(s, r1, 1, 0.1f); dl_store_set_f32(s, r1, 2, 0.8f);
+    uint64_t r2 = dl_store_alloc_row(s); dl_store_set_f32(s, r2, 0, 0.02f); dl_store_set_f32(s, r2, 1, 0.03f); dl_store_set_f32(s, r2, 2, 0.01f);
+
+    dl_lens* lens = dl_lens_create(4);
+    REQUIRE(lens != nullptr);
+
+    const uint64_t scoreCols[3] = {0, 1, 2};
+    // Floor 0.1: r0 -> 0, r1 -> 2, r2 best is 0.03 < 0.1 -> noChoice -1.
+    uint64_t w = dl_lens_run_argmax_f32(lens, s, /*choiceCol*/3, scoreCols, 3, /*minScore*/0.1f, /*noChoice*/-1);
+    REQUIRE(w == 3);
+    int32_t c = 0;
+    dl_store_get_i32(s, r0, 3, &c); REQUIRE(c == 0);
+    dl_store_get_i32(s, r1, 3, &c); REQUIRE(c == 2);
+    dl_store_get_i32(s, r2, 3, &c); REQUIRE(c == -1);
+
+    REQUIRE(dl_lens_run_argmax_f32(nullptr, s, 3, scoreCols, 3, 0.f, -1) == 0);
+
+    dl_lens_destroy(lens);
+    dl_store_destroy(s);
+}
+
 TEST_CASE("c_api: run batched Systems via the Lens (A3.4)", "[c_api]")
 {
     const char* names[] = {"A", "B"};

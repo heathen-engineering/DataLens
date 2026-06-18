@@ -328,6 +328,74 @@ uint64_t dl_lens_run_curved_i32(dl_lens* lens, dl_store* store, uint64_t targetC
         c, hasPredicate != 0, static_cast<size_t>(compareCol), static_cast<DataCompareOp>(cmp), threshold);
 }
 
+uint64_t dl_lens_run_noise_f32(dl_lens* lens, dl_store* store, uint64_t targetCol, int32_t op,
+                               float noiseLo, float noiseHi, uint64_t seed, uint64_t tick,
+                               int32_t hasPredicate, uint64_t compareCol, int32_t cmp, float threshold)
+{
+    if (!lens || !store) return 0;
+    return AsLens(lens)->RunSystemNoiseColumn<float>(*AsStore(store),
+        static_cast<size_t>(targetCol), static_cast<DataSystemOp>(op), noiseLo, noiseHi, seed, tick,
+        hasPredicate != 0, static_cast<size_t>(compareCol), static_cast<DataCompareOp>(cmp), threshold);
+}
+
+uint64_t dl_lens_run_noise_i32(dl_lens* lens, dl_store* store, uint64_t targetCol, int32_t op,
+                               int32_t noiseLo, int32_t noiseHi, uint64_t seed, uint64_t tick,
+                               int32_t hasPredicate, uint64_t compareCol, int32_t cmp, int32_t threshold)
+{
+    if (!lens || !store) return 0;
+    return AsLens(lens)->RunSystemNoiseColumn<int32_t>(*AsStore(store),
+        static_cast<size_t>(targetCol), static_cast<DataSystemOp>(op), noiseLo, noiseHi, seed, tick,
+        hasPredicate != 0, static_cast<size_t>(compareCol), static_cast<DataCompareOp>(cmp), threshold);
+}
+
+uint64_t dl_lens_run_noise_perturb_f32(dl_lens* lens, dl_store* store, uint64_t targetCol, int32_t op,
+                                       uint64_t operandCol, float noiseLo, float noiseHi, uint64_t seed,
+                                       uint64_t tick, int32_t hasPredicate, uint64_t compareCol,
+                                       int32_t cmp, float threshold)
+{
+    if (!lens || !store) return 0;
+    return AsLens(lens)->RunSystemNoisePerturbColumn<float>(*AsStore(store),
+        static_cast<size_t>(targetCol), static_cast<DataSystemOp>(op), static_cast<size_t>(operandCol),
+        noiseLo, noiseHi, seed, tick, hasPredicate != 0, static_cast<size_t>(compareCol),
+        static_cast<DataCompareOp>(cmp), threshold);
+}
+
+uint64_t dl_lens_run_noise_perturb_i32(dl_lens* lens, dl_store* store, uint64_t targetCol, int32_t op,
+                                       uint64_t operandCol, int32_t noiseLo, int32_t noiseHi, uint64_t seed,
+                                       uint64_t tick, int32_t hasPredicate, uint64_t compareCol,
+                                       int32_t cmp, int32_t threshold)
+{
+    if (!lens || !store) return 0;
+    return AsLens(lens)->RunSystemNoisePerturbColumn<int32_t>(*AsStore(store),
+        static_cast<size_t>(targetCol), static_cast<DataSystemOp>(op), static_cast<size_t>(operandCol),
+        noiseLo, noiseHi, seed, tick, hasPredicate != 0, static_cast<size_t>(compareCol),
+        static_cast<DataCompareOp>(cmp), threshold);
+}
+
+uint64_t dl_lens_run_argmax_f32(dl_lens* lens, dl_store* store, uint64_t choiceCol,
+                                const uint64_t* scoreCols, uint64_t scoreColCount,
+                                float minScore, int32_t noChoice)
+{
+    if (!lens || !store) return 0;
+    if (scoreColCount > 0 && !scoreCols) return 0;
+    std::vector<size_t> cols(static_cast<size_t>(scoreColCount));
+    for (uint64_t i = 0; i < scoreColCount; ++i) cols[static_cast<size_t>(i)] = static_cast<size_t>(scoreCols[i]);
+    return AsLens(lens)->RunSystemArgmaxColumns<float>(*AsStore(store), static_cast<size_t>(choiceCol),
+        cols.data(), cols.size(), minScore, noChoice);
+}
+
+uint64_t dl_lens_run_argmax_i32(dl_lens* lens, dl_store* store, uint64_t choiceCol,
+                                const uint64_t* scoreCols, uint64_t scoreColCount,
+                                int32_t minScore, int32_t noChoice)
+{
+    if (!lens || !store) return 0;
+    if (scoreColCount > 0 && !scoreCols) return 0;
+    std::vector<size_t> cols(static_cast<size_t>(scoreColCount));
+    for (uint64_t i = 0; i < scoreColCount; ++i) cols[static_cast<size_t>(i)] = static_cast<size_t>(scoreCols[i]);
+    return AsLens(lens)->RunSystemArgmaxColumns<int32_t>(*AsStore(store), static_cast<size_t>(choiceCol),
+        cols.data(), cols.size(), minScore, noChoice);
+}
+
 uint64_t dl_lens_run_batch(dl_lens* lens, const dl_system_desc* descs, uint64_t count)
 {
     if (!lens || (!descs && count != 0)) return 0;
