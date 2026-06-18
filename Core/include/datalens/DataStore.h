@@ -47,6 +47,29 @@ enum class DataCompareOp : int32_t
 	LacksBits    = 9, // (cell & threshold) == 0
 };
 
+/// <summary>A pass-level response curve x->y in [0,1] applied to a System's per-row operand before it
+/// is combined into the target (DataLens-Spec A3.11). The curve and its parameters are uniform for the
+/// whole pass (no per-row branch or table lookup), so a "consideration" stays the contiguous, branchless
+/// RunColumnSystem shape. v1 curves are transcendental-free.</summary>
+enum class DataCurveType : int32_t
+{
+	Linear     = 0, // y = p0 * x + p1            (slope, intercept)
+	Power      = 1, // y = x ^ (int)p0            (repeated multiply; p0 = integer exponent, clamped 0..16)
+	Smoothstep = 2, // y = x*x*(3 - 2x)
+	Threshold  = 3, // y = x >= p0 ? 1 : 0        (step at p0)
+};
+
+/// <summary>Pass-level parameters for <see cref="DataCurveType"/>: the input normalise range [min,max]
+/// (raw operand -> x in [0,1], clamped), two curve params, and an invert flag (y -> 1 - y). The default
+/// is the identity (Linear y=x over [0,1]).</summary>
+struct CurveSpec
+{
+	DataCurveType type = DataCurveType::Linear;
+	float min = 0.0f, max = 1.0f; // normalise raw operand: x = clamp01((raw - min)/(max - min))
+	float p0 = 1.0f, p1 = 0.0f;   // curve params (see DataCurveType)
+	bool invert = false;          // y -> 1 - y after evaluation/clamp
+};
+
 /// <summary>
 /// DataStore provides a column-oriented, in-memory table of raw bytes with
 /// flexible per-column stride, supporting both unchecked raw access and safe
@@ -173,6 +196,10 @@ public:
 	/// </summary>
 	const uint8_t* GetColumnRaw(size_t col) const;
 
+	/// <summary>Sentinel for a System's predicate type meaning "same type as the operand/target" — the
+	/// default. A different value (Int32/Float) selects a mixed-type predicate (see the System kernel).</summary>
+	static constexpr DataLensValueType kSameType = static_cast<DataLensValueType>(-1);
+
 	/// <summary>Cache line the column buffers are aligned to (so concurrent Systems writing
 	/// different columns never false-share). See <see cref="IsColumnCacheAligned"/>.</summary>
 	static constexpr size_t CacheLineSize() { return 64; }
@@ -243,6 +270,38 @@ public:
 			rowEnd = mRowCount;
 		return RunColumnSystemChunkImpl<T, false, false>(rowBegin, rowEnd, targetCol, op, operand, 0,
 		                                                 hasPredicate, compareCol, cmp, threshold, 0, 255);
+	}
+
+	/// <summary>
+	/// Scalar System with a MIXED-TYPE predicate (A "trigger gate"): apply (targetCol = targetCol OP
+	/// operand) to every live row where the predicate column — interpreted as <paramref name="predType"/>
+	/// — satisfies (cmp <paramref name="predThreshold"/>). Lets a float-attribute effect be gated by an
+	/// int tag-bitmask column (predType = Int32, cmp = HasAllBits/HasAnyBits/LacksBits) in one branchless
+	/// pass. Returns the number of rows affected.
+	/// </summary>
+	template <typename T>
+	size_t RunColumnSystemTypedPred(size_t targetCol, DataSystemOp op, T operand,
+	                                size_t compareCol, DataCompareOp cmp,
+	                                DataLensValueType predType, double predThreshold)
+	{
+		return RunColumnSystemTypedPredChunk<T>(0, mRowCount, targetCol, op, operand,
+		                                        compareCol, cmp, predType, predThreshold);
+	}
+
+	/// <summary>Disjoint sub-range form of <see cref="RunColumnSystemTypedPred"/> (used by the Lens).</summary>
+	template <typename T>
+	size_t RunColumnSystemTypedPredChunk(size_t rowBegin, size_t rowEnd,
+	                                     size_t targetCol, DataSystemOp op, T operand,
+	                                     size_t compareCol, DataCompareOp cmp,
+	                                     DataLensValueType predType, double predThreshold)
+	{
+		if (targetCol >= mColumns.size() || compareCol >= mColumns.size())
+			return 0;
+		if (rowEnd > mRowCount)
+			rowEnd = mRowCount;
+		return RunColumnSystemChunkImpl<T, false, false>(rowBegin, rowEnd, targetCol, op, operand, 0,
+		                                                 true, compareCol, cmp, T{}, 0, 255,
+		                                                 predType, predThreshold);
 	}
 
 	/// <summary>
@@ -369,6 +428,38 @@ public:
 	}
 
 	/// <summary>
+	/// Curved cross-column System (DataLens-Spec A3.11): the per-row operand read from <paramref name="operandCol"/>
+	/// is passed through the pass-level response <paramref name="curve"/> (normalise to [0,1] -> curve ->
+	/// [0,1]) before applying `targetCol = targetCol OP curve(operandCol)`. This is the HATE §8 considerations
+	/// primitive: one consideration = one contiguous, branchless pass folding a curved metric into a score
+	/// accumulator (combine with Mul for product aggregation, Add for weighted-sum). Returns rows affected.
+	/// </summary>
+	template <typename T>
+	size_t RunColumnSystemCurvedColumn(size_t targetCol, DataSystemOp op, size_t operandCol, const CurveSpec& curve,
+	                                   bool hasPredicate, size_t compareCol, DataCompareOp cmp, T threshold)
+	{
+		return RunColumnSystemCurvedColumnChunk<T>(0, mRowCount, targetCol, op, operandCol, curve,
+		                                           hasPredicate, compareCol, cmp, threshold);
+	}
+
+	/// <summary>Disjoint sub-range form of <see cref="RunColumnSystemCurvedColumn"/> (used by the Lens).</summary>
+	template <typename T>
+	size_t RunColumnSystemCurvedColumnChunk(size_t rowBegin, size_t rowEnd,
+	                                        size_t targetCol, DataSystemOp op, size_t operandCol, const CurveSpec& curve,
+	                                        bool hasPredicate, size_t compareCol, DataCompareOp cmp, T threshold)
+	{
+		if (targetCol >= mColumns.size() || operandCol >= mColumns.size())
+			return 0;
+		if (hasPredicate && compareCol >= mColumns.size())
+			return 0;
+		if (rowEnd > mRowCount)
+			rowEnd = mRowCount;
+		return RunColumnSystemChunkImpl<T, true, false, false, true>(rowBegin, rowEnd, targetCol, op, T{}, operandCol,
+		                                                             hasPredicate, compareCol, cmp, threshold, 0, 255,
+		                                                             kSameType, 0.0, curve);
+	}
+
+	/// <summary>
 	/// Total bytes per row (sum of all column strides).
 	/// </summary>
 	/// <returns></returns>
@@ -387,15 +478,97 @@ private:
 	/// the hot loop carries no per-row branch on the operand source and stays vectorisable.
 	/// Bounds are validated by the public callers before this runs.
 	/// </summary>
-	template <typename T, bool OperandIsColumn, bool UseLod, bool ScaleOperand = false>
+	/// <summary>Evaluate one predicate comparison in the predicate column's own type P. Bitmask ops
+	/// (HasAllBits/HasAnyBits/LacksBits) are integer-only (false on floating-point). Shared by the
+	/// same-type and mixed-type predicate paths.</summary>
+	/// <summary>Evaluate a pass-level response curve at a raw operand value (DataLens-Spec A3.11). The raw
+	/// value is normalised to x in [0,1] over [c.min, c.max] (clamped), the curve is applied, the result
+	/// clamped to [0,1], then optionally inverted. Transcendental-free (Power uses repeated multiply).
+	/// Uniform per pass: every row in a System pass uses the same CurveSpec, so there is no per-row branch
+	/// on curve type beyond a loop-invariant switch.</summary>
+	static float EvalCurve(float raw, const CurveSpec& c)
+	{
+		const float denom = c.max - c.min;
+		float x = denom > 0.0f ? (raw - c.min) / denom : 0.0f;
+		x = x < 0.0f ? 0.0f : (x > 1.0f ? 1.0f : x);
+
+		float y;
+		switch (c.type)
+		{
+		case DataCurveType::Linear:     y = c.p0 * x + c.p1; break;
+		case DataCurveType::Power:
+		{
+			int k = static_cast<int>(c.p0);
+			if (k < 0) k = 0; else if (k > 16) k = 16; // bounded, transcendental-free
+			y = 1.0f;
+			for (int i = 0; i < k; ++i) y *= x; // x^k (k=0 -> constant 1)
+			break;
+		}
+		case DataCurveType::Smoothstep: y = x * x * (3.0f - 2.0f * x); break;
+		case DataCurveType::Threshold:  y = (x >= c.p0) ? 1.0f : 0.0f; break;
+		default:                        y = x; break;
+		}
+
+		y = y < 0.0f ? 0.0f : (y > 1.0f ? 1.0f : y);
+		if (c.invert) y = 1.0f - y;
+		return y;
+	}
+
+	template <typename P>
+	static bool ComparePredicate(P pv, DataCompareOp cmp, P threshold)
+	{
+		switch (cmp)
+		{
+		case DataCompareOp::Always:       return true;
+		case DataCompareOp::Equal:        return pv == threshold;
+		case DataCompareOp::NotEqual:     return pv != threshold;
+		case DataCompareOp::Less:         return pv <  threshold;
+		case DataCompareOp::LessEqual:    return pv <= threshold;
+		case DataCompareOp::Greater:      return pv >  threshold;
+		case DataCompareOp::GreaterEqual: return pv >= threshold;
+		case DataCompareOp::HasAllBits:
+		case DataCompareOp::HasAnyBits:
+		case DataCompareOp::LacksBits:
+			if constexpr (std::is_integral<P>::value)
+			{
+				switch (cmp)
+				{
+				case DataCompareOp::HasAllBits: return (pv & threshold) == threshold;
+				case DataCompareOp::HasAnyBits: return (pv & threshold) != P{0};
+				case DataCompareOp::LacksBits:  return (pv & threshold) == P{0};
+				default:                        return true;
+				}
+			}
+			else
+			{
+				return false; // bitmask compares never match on floating-point columns
+			}
+		default: return true;
+		}
+	}
+
+	/// <summary>
+	/// Shared System kernel. The PREDICATE may be a different type than the operand/target type T
+	/// (A "mixed-type predicate"): when <paramref name="predType"/> is <see cref="kSameType"/> the
+	/// predicate is read as T with the T <paramref name="threshold"/>; otherwise it is read in
+	/// <paramref name="predType"/> (Int32/Float) against <paramref name="predThresholdRaw"/>. This lets,
+	/// e.g., a float-attribute effect be gated by an int tag-bitmask column in one branchless pass.
+	/// </summary>
+	template <typename T, bool OperandIsColumn, bool UseLod, bool ScaleOperand = false, bool ApplyCurve = false>
 	size_t RunColumnSystemChunkImpl(size_t rowBegin, size_t rowEnd,
 	                                size_t targetCol, DataSystemOp op, T operand, size_t operandCol,
 	                                bool hasPredicate, size_t compareCol, DataCompareOp cmp, T threshold,
-	                                uint8_t minLod, uint8_t maxLod)
+	                                uint8_t minLod, uint8_t maxLod,
+	                                DataLensValueType predType = kSameType, double predThresholdRaw = 0.0,
+	                                const CurveSpec& curve = CurveSpec{})
 	{
 		// ScaleOperand only applies in cross-column mode: rhs = operandCol[r] * scale (operand holds
 		// the scalar scale). This is the fused-multiply primitive (e.g. pos += vel * dt).
 		static_assert(!ScaleOperand || OperandIsColumn, "ScaleOperand requires OperandIsColumn");
+		// ApplyCurve transforms the per-row operand (a metric) through a pass-level response curve before
+		// the combine — the considerations primitive (A3.11). It reads the operand from a column.
+		static_assert(!ApplyCurve || OperandIsColumn, "ApplyCurve requires OperandIsColumn");
+		static_assert(!(ApplyCurve && ScaleOperand), "ApplyCurve and ScaleOperand are mutually exclusive");
 		const T scale = operand;
 		uint8_t* tcol = mColumnsData[targetCol].data();
 		const size_t tstride = mColumns[targetCol].GetStride();
@@ -424,6 +597,8 @@ private:
 				std::memcpy(&rhs, ocol + r * ostride, sizeof(T));
 				if (ScaleOperand)
 					rhs = static_cast<T>(rhs * scale);
+				if (ApplyCurve)
+					rhs = static_cast<T>(EvalCurve(static_cast<float>(rhs), curve));
 			}
 			else
 				rhs = operand;
@@ -463,36 +638,25 @@ private:
 			bool match = true;
 			if (hasPredicate)
 			{
-				T pv;
-				std::memcpy(&pv, pcol + r * pstride, sizeof(T));
-				switch (cmp)
+				// predType resolves at compile-time-invariant cost (loop-invariant branch). Same-type is
+				// the common path; the int/float cases enable a predicate column of a different type.
+				if (predType == kSameType)
 				{
-				case DataCompareOp::Always:       match = true; break;
-				case DataCompareOp::Equal:        match = (pv == threshold); break;
-				case DataCompareOp::NotEqual:     match = (pv != threshold); break;
-				case DataCompareOp::Less:         match = (pv <  threshold); break;
-				case DataCompareOp::LessEqual:    match = (pv <= threshold); break;
-				case DataCompareOp::Greater:      match = (pv >  threshold); break;
-				case DataCompareOp::GreaterEqual: match = (pv >= threshold); break;
-				case DataCompareOp::HasAllBits:
-				case DataCompareOp::HasAnyBits:
-				case DataCompareOp::LacksBits:
-					if constexpr (std::is_integral<T>::value)
-					{
-						switch (cmp)
-						{
-						case DataCompareOp::HasAllBits: match = ((pv & threshold) == threshold); break;
-						case DataCompareOp::HasAnyBits: match = ((pv & threshold) != T{0}); break;
-						case DataCompareOp::LacksBits:  match = ((pv & threshold) == T{0}); break;
-						default:                        match = true; break;
-						}
-					}
-					else
-					{
-						match = false; // bitmask compares never match on floating-point columns
-					}
-					break;
-				default: match = true; break;
+					T pv;
+					std::memcpy(&pv, pcol + r * pstride, sizeof(T));
+					match = ComparePredicate<T>(pv, cmp, threshold);
+				}
+				else if (predType == DataLensValueType::Int32)
+				{
+					int32_t pv;
+					std::memcpy(&pv, pcol + r * pstride, sizeof(int32_t));
+					match = ComparePredicate<int32_t>(pv, cmp, static_cast<int32_t>(predThresholdRaw));
+				}
+				else if (predType == DataLensValueType::Float)
+				{
+					float pv;
+					std::memcpy(&pv, pcol + r * pstride, sizeof(float));
+					match = ComparePredicate<float>(pv, cmp, static_cast<float>(predThresholdRaw));
 				}
 			}
 

@@ -58,6 +58,13 @@ namespace
             d.compareCol      = static_cast<size_t>(s.compare_col);
             d.cmp             = static_cast<DataCompareOp>(s.cmp);
             d.threshold       = s.threshold;
+            d.applyCurve      = s.apply_curve != 0;
+            d.curve.type      = static_cast<DataCurveType>(s.curve_type);
+            d.curve.min       = s.curve_min;
+            d.curve.max       = s.curve_max;
+            d.curve.p0        = s.curve_p0;
+            d.curve.p1        = s.curve_p1;
+            d.curve.invert    = s.curve_invert != 0;
             if (useBand)
             {
                 d.minLod = minLod;
@@ -293,6 +300,34 @@ uint64_t dl_lens_run_col_i32(dl_lens* lens, dl_store* store, uint64_t targetCol,
         hasPredicate != 0, static_cast<size_t>(compareCol), static_cast<DataCompareOp>(cmp), threshold);
 }
 
+uint64_t dl_lens_run_curved_f32(dl_lens* lens, dl_store* store, uint64_t targetCol, int32_t op,
+                                uint64_t operandCol, int32_t curveType, float curveMin, float curveMax,
+                                float curveP0, float curveP1, int32_t curveInvert,
+                                int32_t hasPredicate, uint64_t compareCol, int32_t cmp, float threshold)
+{
+    if (!lens || !store) return 0;
+    CurveSpec c;
+    c.type = static_cast<DataCurveType>(curveType);
+    c.min = curveMin; c.max = curveMax; c.p0 = curveP0; c.p1 = curveP1; c.invert = curveInvert != 0;
+    return AsLens(lens)->RunSystemCurvedColumn<float>(*AsStore(store),
+        static_cast<size_t>(targetCol), static_cast<DataSystemOp>(op), static_cast<size_t>(operandCol),
+        c, hasPredicate != 0, static_cast<size_t>(compareCol), static_cast<DataCompareOp>(cmp), threshold);
+}
+
+uint64_t dl_lens_run_curved_i32(dl_lens* lens, dl_store* store, uint64_t targetCol, int32_t op,
+                                uint64_t operandCol, int32_t curveType, float curveMin, float curveMax,
+                                float curveP0, float curveP1, int32_t curveInvert,
+                                int32_t hasPredicate, uint64_t compareCol, int32_t cmp, int32_t threshold)
+{
+    if (!lens || !store) return 0;
+    CurveSpec c;
+    c.type = static_cast<DataCurveType>(curveType);
+    c.min = curveMin; c.max = curveMax; c.p0 = curveP0; c.p1 = curveP1; c.invert = curveInvert != 0;
+    return AsLens(lens)->RunSystemCurvedColumn<int32_t>(*AsStore(store),
+        static_cast<size_t>(targetCol), static_cast<DataSystemOp>(op), static_cast<size_t>(operandCol),
+        c, hasPredicate != 0, static_cast<size_t>(compareCol), static_cast<DataCompareOp>(cmp), threshold);
+}
+
 uint64_t dl_lens_run_batch(dl_lens* lens, const dl_system_desc* descs, uint64_t count)
 {
     if (!lens || (!descs && count != 0)) return 0;
@@ -340,6 +375,13 @@ void dl_ir_add_system(dl_ir_program* program, const dl_ir_op* op)
     o.maxLod          = ClampLod(op->max_lod);
     o.operand         = op->operand;
     o.threshold       = op->threshold;
+    o.applyCurve      = static_cast<uint32_t>(op->apply_curve);
+    o.curveType       = op->curve_type;
+    o.curveInvert     = static_cast<uint32_t>(op->curve_invert);
+    o.curveMin        = op->curve_min;
+    o.curveMax        = op->curve_max;
+    o.curveP0         = op->curve_p0;
+    o.curveP1         = op->curve_p1;
     AsProgram(program)->Add(o);
 }
 
@@ -448,6 +490,26 @@ void dl_lens_refresh_view_lod(dl_lens* lens, struct dl_view* view, const dl_stor
 {
     if (lens && view && store)
         AsLens(lens)->RefreshView(*AsView(view), *AsStore(store), true, ClampLod(minLod), ClampLod(maxLod));
+}
+
+uint64_t dl_lens_run_f32_pred_i32(dl_lens* lens, dl_store* store, uint64_t targetCol, int32_t op,
+                                  float operand, uint64_t compareCol, int32_t cmp, int32_t threshold)
+{
+    if (!lens || !store) return 0;
+    return AsLens(lens)->RunSystemTypedPred<float>(*AsStore(store),
+        static_cast<size_t>(targetCol), static_cast<DataSystemOp>(op), operand,
+        static_cast<size_t>(compareCol), static_cast<DataCompareOp>(cmp),
+        DataLensValueType::Int32, static_cast<double>(threshold));
+}
+
+uint64_t dl_lens_run_i32_pred_f32(dl_lens* lens, dl_store* store, uint64_t targetCol, int32_t op,
+                                  int32_t operand, uint64_t compareCol, int32_t cmp, float threshold)
+{
+    if (!lens || !store) return 0;
+    return AsLens(lens)->RunSystemTypedPred<int32_t>(*AsStore(store),
+        static_cast<size_t>(targetCol), static_cast<DataSystemOp>(op), operand,
+        static_cast<size_t>(compareCol), static_cast<DataCompareOp>(cmp),
+        DataLensValueType::Float, static_cast<double>(threshold));
 }
 
 // ── Read-only DataView (A5) ─────────────────────────────────────────────────

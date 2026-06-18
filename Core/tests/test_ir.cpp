@@ -65,6 +65,46 @@ TEST_CASE("ir: cross-column + predicate + lod ops round through the IR", "[ir]")
     REQUIRE(s.GetRaw<int32_t>(r2, 0) == 999); // outside band
 }
 
+TEST_CASE("ir: curved cross-column op round-trips and serialises (A3.11)", "[ir]")
+{
+    // Metric in {0,50,100}; Score = curve(Metric) with a falling identity over [0,100] (invert).
+    std::vector<DataStoreColumnSchema> cols = {{"Metric", DataLensValueType::Float},
+                                               {"Score",  DataLensValueType::Float}};
+    auto build = [&cols]() {
+        DataStore s(cols, 3);
+        size_t r0 = s.AllocRow(); s.SetRaw<float>(r0, 0, 0.0f);   s.SetRaw<float>(r0, 1, 0.0f);
+        size_t r1 = s.AllocRow(); s.SetRaw<float>(r1, 0, 50.0f);  s.SetRaw<float>(r1, 1, 0.0f);
+        size_t r2 = s.AllocRow(); s.SetRaw<float>(r2, 0, 100.0f); s.SetRaw<float>(r2, 1, 0.0f);
+        return s;
+    };
+
+    CurveSpec c; c.min = 0.0f; c.max = 100.0f; c.invert = true; // 1 - normalise(Metric)
+
+    IrProgram prog;
+    prog.Add(IrSystemOp::CurvedColumn(0, DataLensValueType::Float, 1, DataSystemOp::Set, 0, c));
+
+    DataStore direct = build();
+    DataStore* sd[] = {&direct};
+    datalens::Lens lens(4);
+    lens.Execute(prog, sd, 1);
+    REQUIRE(direct.GetRaw<float>(0, 1) == 1.0f);
+    REQUIRE(direct.GetRaw<float>(1, 1) == 0.5f);
+    REQUIRE(direct.GetRaw<float>(2, 1) == 0.0f);
+
+    // Serialise (v2) -> deserialise -> identical execution.
+    std::vector<uint8_t> bytes = prog.Serialize();
+    IrProgram restored;
+    REQUIRE(IrProgram::Deserialize(bytes.data(), bytes.size(), restored));
+    REQUIRE(restored.Count() == 1);
+
+    DataStore round = build();
+    DataStore* sr[] = {&round};
+    lens.Execute(restored, sr, 1);
+    REQUIRE(round.GetRaw<float>(0, 1) == 1.0f);
+    REQUIRE(round.GetRaw<float>(1, 1) == 0.5f);
+    REQUIRE(round.GetRaw<float>(2, 1) == 0.0f);
+}
+
 TEST_CASE("ir: serialize/deserialize round-trips and executes identically", "[ir]")
 {
     IrProgram prog;

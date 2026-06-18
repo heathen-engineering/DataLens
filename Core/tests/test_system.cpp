@@ -191,6 +191,54 @@ TEST_CASE("system: bitmask predicates gate by flags (A3.8)", "[system][bitmask]"
     REQUIRE(s.GetRaw<int32_t>(r1, 0) == 9);
 }
 
+TEST_CASE("system: mixed-type predicate gates a float op by an int bitmask column (A3.10)", "[system][mixedpred]")
+{
+    // HATE shape: HP (float) damaged where an int Flags column has the Burning bit (0b0010).
+    std::vector<DataStoreColumnSchema> cols = {{"HP", DataLensValueType::Float},
+                                               {"Flags", DataLensValueType::Int32}};
+    DataStore s(cols, 4);
+    size_t r0 = s.AllocRow(); s.SetRaw<float>(r0, 0, 100.0f); s.SetRaw<int32_t>(r0, 1, 0b0000);
+    size_t r1 = s.AllocRow(); s.SetRaw<float>(r1, 0, 100.0f); s.SetRaw<int32_t>(r1, 1, 0b0010);
+    size_t r2 = s.AllocRow(); s.SetRaw<float>(r2, 0, 100.0f); s.SetRaw<int32_t>(r2, 1, 0b0110);
+
+    size_t n = s.RunColumnSystemTypedPred<float>(0, DataSystemOp::Add, -10.0f,
+        /*compareCol*/1, DataCompareOp::HasAnyBits, DataLensValueType::Int32, /*threshold*/0b0010);
+    REQUIRE(n == 2);
+    REQUIRE(s.GetRaw<float>(r0, 0) == 100.0f); // not burning
+    REQUIRE(s.GetRaw<float>(r1, 0) == 90.0f);  // burning
+    REQUIRE(s.GetRaw<float>(r2, 0) == 90.0f);  // burning (+ other bit)
+}
+
+TEST_CASE("system: mixed-type predicate gates an int op by a float column (A3.10)", "[system][mixedpred]")
+{
+    // Batch-eligibility shape: knock out an int Eligible flag where a float Mana column is below cost.
+    std::vector<DataStoreColumnSchema> cols = {{"Eligible", DataLensValueType::Int32},
+                                               {"Mana", DataLensValueType::Float}};
+    DataStore s(cols, 3);
+    size_t r0 = s.AllocRow(); s.SetRaw<int32_t>(r0, 0, 1); s.SetRaw<float>(r0, 1, 100.0f);
+    size_t r1 = s.AllocRow(); s.SetRaw<int32_t>(r1, 0, 1); s.SetRaw<float>(r1, 1, 20.0f);
+
+    // Eligible = 0 where Mana < 30.
+    size_t n = s.RunColumnSystemTypedPred<int32_t>(0, DataSystemOp::Set, 0,
+        /*compareCol*/1, DataCompareOp::Less, DataLensValueType::Float, /*threshold*/30.0);
+    REQUIRE(n == 1);
+    REQUIRE(s.GetRaw<int32_t>(r0, 0) == 1); // 100 >= 30 -> stays eligible
+    REQUIRE(s.GetRaw<int32_t>(r1, 0) == 0); // 20 < 30 -> knocked out
+}
+
+TEST_CASE("system: same-type predicate still works through the refactor", "[system][mixedpred]")
+{
+    // Regression: kSameType path unchanged (float op gated by a float predicate on the same col).
+    std::vector<DataStoreColumnSchema> cols = {{"HP", DataLensValueType::Float}};
+    DataStore s(cols, 3);
+    size_t r0 = s.AllocRow(); s.SetRaw<float>(r0, 0, 100.0f);
+    size_t r1 = s.AllocRow(); s.SetRaw<float>(r1, 0, 30.0f);
+    size_t n = s.RunColumnSystem<float>(0, DataSystemOp::Add, 100.0f, true, 0, DataCompareOp::Less, 50.0f);
+    REQUIRE(n == 1);
+    REQUIRE(s.GetRaw<float>(r1, 0) == 130.0f);
+    REQUIRE(s.GetRaw<float>(r0, 0) == 100.0f);
+}
+
 TEST_CASE("system: bitwise op on a float column is a no-op (A3.8)", "[system][bitmask]")
 {
     std::vector<DataStoreColumnSchema> cols = {{"V", DataLensValueType::Float}};

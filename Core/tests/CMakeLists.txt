@@ -12,6 +12,7 @@ add_executable(datalens_tests
     test_view.cpp
     test_c_api.cpp
     test_system.cpp
+    test_curve.cpp
     test_lens.cpp
     test_ir.cpp
     test_schedule.cpp

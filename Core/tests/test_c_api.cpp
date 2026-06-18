@@ -133,6 +133,36 @@ TEST_CASE("c_api: run cross-column system (A3.3)", "[c_api]")
     dl_store_destroy(s);
 }
 
+TEST_CASE("c_api: curved cross-column System via the Lens (A3.11)", "[c_api]")
+{
+    const char* names[] = {"Metric", "Score"};
+    const int32_t types[] = {kFloat, kFloat};
+    dl_store* s = dl_store_create(names, types, 2, 4);
+    REQUIRE(s != nullptr);
+
+    uint64_t r0 = dl_store_alloc_row(s); dl_store_set_f32(s, r0, 0, 0.0f);   dl_store_set_f32(s, r0, 1, 0.0f);
+    uint64_t r1 = dl_store_alloc_row(s); dl_store_set_f32(s, r1, 0, 50.0f);  dl_store_set_f32(s, r1, 1, 0.0f);
+    uint64_t r2 = dl_store_alloc_row(s); dl_store_set_f32(s, r2, 0, 100.0f); dl_store_set_f32(s, r2, 1, 0.0f);
+
+    dl_lens* lens = dl_lens_create(4);
+    REQUIRE(lens != nullptr);
+
+    // Score = (1 - normalise(Metric over [0,100]))  -> a falling "execute" curve.  op=0 Set, curveType=0 Linear.
+    uint64_t n = dl_lens_run_curved_f32(lens, s, /*target*/1, /*op*/0, /*operandCol*/0,
+                                        /*curveType*/0, /*min*/0.0f, /*max*/100.0f, /*p0*/1.0f, /*p1*/0.0f,
+                                        /*invert*/1, /*hasPred*/0, /*cmpCol*/0, /*cmp*/0, /*thr*/0.0f);
+    REQUIRE(n == 3);
+    float f = 0.0f;
+    dl_store_get_f32(s, r0, 1, &f); REQUIRE(f == 1.0f);
+    dl_store_get_f32(s, r1, 1, &f); REQUIRE(f == 0.5f);
+    dl_store_get_f32(s, r2, 1, &f); REQUIRE(f == 0.0f);
+
+    REQUIRE(dl_lens_run_curved_f32(nullptr, s, 1, 0, 0, 0, 0.f, 1.f, 1.f, 0.f, 0, 0, 0, 0, 0.f) == 0);
+
+    dl_lens_destroy(lens);
+    dl_store_destroy(s);
+}
+
 TEST_CASE("c_api: run batched Systems via the Lens (A3.4)", "[c_api]")
 {
     const char* names[] = {"A", "B"};

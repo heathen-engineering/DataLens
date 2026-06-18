@@ -53,6 +53,11 @@ namespace datalens
         // affected. The default 0..255 means "all rows" (no LOD scoping).
         std::uint8_t      minLod         = 0;
         std::uint8_t      maxLod         = 255;
+        // Response curve (A3.11): when applyCurve (cross-column only, non-banded), the per-row operand
+        // is passed through `curve` (normalise -> curve -> [0,1]) before the combine — the HATE §8
+        // considerations primitive. Mutually exclusive with scaleOperand.
+        bool              applyCurve     = false;
+        CurveSpec         curve;
     };
 
     /// <summary>
@@ -172,6 +177,26 @@ namespace datalens
             return affected.load(std::memory_order_relaxed);
         }
 
+        /// Scalar System with a mixed-type predicate, parallelised across the pool. Gates a T-typed op
+        /// by a predicate column of a different type (predType) — e.g. a float effect gated by an int
+        /// tag-bitmask column. Returns rows affected.
+        template <typename T>
+        std::size_t RunSystemTypedPred(DataStore& store, std::size_t targetCol, DataSystemOp op, T operand,
+                                       std::size_t compareCol, DataCompareOp cmp,
+                                       DataLensValueType predType, double predThreshold)
+        {
+            const std::size_t rows = store.GetRowCount();
+            std::atomic<std::size_t> affected{0};
+
+            mPool.ParallelFor(rows, kMinChunk, [&](std::size_t begin, std::size_t end) {
+                const std::size_t a = store.RunColumnSystemTypedPredChunk<T>(
+                    begin, end, targetCol, op, operand, compareCol, cmp, predType, predThreshold);
+                affected.fetch_add(a, std::memory_order_relaxed);
+            });
+
+            return affected.load(std::memory_order_relaxed);
+        }
+
         /// Scaled cross-column System (fused multiply: rhs = operandCol[r] * scale), parallelised.
         template <typename T>
         std::size_t RunSystemScaledColumn(DataStore& store, std::size_t targetCol, DataSystemOp op,
@@ -184,6 +209,25 @@ namespace datalens
             mPool.ParallelFor(rows, kMinChunk, [&](std::size_t begin, std::size_t end) {
                 const std::size_t a = store.RunColumnSystemScaledColumnChunk<T>(
                     begin, end, targetCol, op, operandCol, scale, hasPredicate, compareCol, cmp, threshold);
+                affected.fetch_add(a, std::memory_order_relaxed);
+            });
+
+            return affected.load(std::memory_order_relaxed);
+        }
+
+        /// Curved cross-column System (A3.11): rhs = curve(operandCol[r]) before the combine, parallelised
+        /// across the pool. The HATE §8 considerations primitive (one curved metric folded into a score).
+        template <typename T>
+        std::size_t RunSystemCurvedColumn(DataStore& store, std::size_t targetCol, DataSystemOp op,
+                                          std::size_t operandCol, const CurveSpec& curve, bool hasPredicate,
+                                          std::size_t compareCol, DataCompareOp cmp, T threshold)
+        {
+            const std::size_t rows = store.GetRowCount();
+            std::atomic<std::size_t> affected{0};
+
+            mPool.ParallelFor(rows, kMinChunk, [&](std::size_t begin, std::size_t end) {
+                const std::size_t a = store.RunColumnSystemCurvedColumnChunk<T>(
+                    begin, end, targetCol, op, operandCol, curve, hasPredicate, compareCol, cmp, threshold);
                 affected.fetch_add(a, std::memory_order_relaxed);
             });
 
@@ -371,6 +415,13 @@ namespace datalens
                 d.threshold       = o.threshold;
                 d.minLod          = applyBand ? bandMin : o.minLod;
                 d.maxLod          = applyBand ? bandMax : o.maxLod;
+                d.applyCurve      = o.applyCurve != 0;
+                d.curve.type      = static_cast<DataCurveType>(o.curveType);
+                d.curve.min       = o.curveMin;
+                d.curve.max       = o.curveMax;
+                d.curve.p0        = o.curveP0;
+                d.curve.p1        = o.curveP1;
+                d.curve.invert    = o.curveInvert != 0;
                 descs.push_back(d);
             }
             return descs;
@@ -401,6 +452,9 @@ namespace datalens
         std::size_t RunOneParallelTyped(const SystemDesc& d)
         {
             const T thr = static_cast<T>(d.threshold);
+            if (d.operandIsColumn && d.applyCurve && !IsBanded(d))
+                return RunSystemCurvedColumn<T>(*d.store, d.targetCol, d.op, d.operandCol,
+                    d.curve, d.hasPredicate, d.compareCol, d.cmp, thr);
             if (d.operandIsColumn && d.scaleOperand && !IsBanded(d))
                 return RunSystemScaledColumn<T>(*d.store, d.targetCol, d.op, d.operandCol,
                     static_cast<T>(d.operandScale), d.hasPredicate, d.compareCol, d.cmp, thr);

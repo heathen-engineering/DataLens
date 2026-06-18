@@ -119,6 +119,18 @@ DL_API uint64_t dl_lens_run_col_i32(dl_lens* lens, dl_store* store, uint64_t tar
                                     uint64_t operandCol, int32_t hasPredicate, uint64_t compareCol,
                                     int32_t cmp, int32_t threshold);
 
+/* Parallel curved cross-column Systems (A3.11): rhs = curve(operandCol[r]) before the combine — the
+ * HATE §8 considerations primitive. curveType is a DataCurveType (0 Linear / 1 Power / 2 Smoothstep /
+ * 3 Threshold); the operand is normalised over [curveMin,curveMax] then curved to [0,1], invert flips it. */
+DL_API uint64_t dl_lens_run_curved_f32(dl_lens* lens, dl_store* store, uint64_t targetCol, int32_t op,
+                                       uint64_t operandCol, int32_t curveType, float curveMin, float curveMax,
+                                       float curveP0, float curveP1, int32_t curveInvert,
+                                       int32_t hasPredicate, uint64_t compareCol, int32_t cmp, float threshold);
+DL_API uint64_t dl_lens_run_curved_i32(dl_lens* lens, dl_store* store, uint64_t targetCol, int32_t op,
+                                       uint64_t operandCol, int32_t curveType, float curveMin, float curveMax,
+                                       float curveP0, float curveP1, int32_t curveInvert,
+                                       int32_t hasPredicate, uint64_t compareCol, int32_t cmp, int32_t threshold);
+
 /* Batched Systems (A3.4): a data-described System the Lens can schedule. The Lens runs a whole
  * array of these in one call, executing non-conflicting Systems concurrently while preserving
  * deterministic submission order for conflicting ones (see dl_lens_run_batch).
@@ -142,6 +154,16 @@ typedef struct dl_system_desc
     uint64_t  compare_col;
     double    operand;
     double    threshold;
+    /* Response curve (A3.11): when apply_curve, the per-row operand (cross-column only) is normalised
+     * over [curve_min,curve_max] and passed through curve_type before the combine. */
+    int32_t   apply_curve;
+    int32_t   curve_type;      /* DataCurveType: 0 Linear / 1 Power / 2 Smoothstep / 3 Threshold */
+    int32_t   curve_invert;
+    int32_t   _pad2;
+    float     curve_min;
+    float     curve_max;
+    float     curve_p0;
+    float     curve_p1;
 } dl_system_desc;
 
 /* Run `count` Systems via the Lens. Returns the total rows affected across the batch. */
@@ -155,7 +177,7 @@ DL_API uint64_t dl_lens_run_batch_lod(dl_lens* lens, const dl_system_desc* descs
 /* ── Query/Update IR (A4) ──────────────────────────────────────────────────
  * A pointer-free, serialisable program of System ops. Stores are referenced by INDEX into the table
  * passed to dl_lens_execute / dl_lens_tick. One op (mirror this struct exactly on the managed side):
- * fixed 64-byte layout. min_lod/max_lod are clamped to 0..255. */
+ * fixed 96-byte layout. min_lod/max_lod are clamped to 0..255. */
 typedef struct dl_ir_op
 {
     int32_t store_index;
@@ -172,6 +194,16 @@ typedef struct dl_ir_op
     int32_t _pad;
     double  operand;
     double  threshold;
+    /* Response curve (A3.11): when apply_curve, the per-row operand (cross-column only) is normalised
+     * over [curve_min,curve_max] and passed through curve_type before the combine. */
+    int32_t apply_curve;
+    int32_t curve_type;       /* DataCurveType */
+    int32_t curve_invert;
+    int32_t _pad2;
+    float   curve_min;
+    float   curve_max;
+    float   curve_p0;
+    float   curve_p1;
 } dl_ir_op;
 
 typedef struct dl_ir_program dl_ir_program; /* opaque */
@@ -216,6 +248,18 @@ DL_API uint64_t dl_lens_tick(dl_lens* lens, dl_store* const* stores, uint64_t st
 DL_API void dl_lens_refresh_view(dl_lens* lens, struct dl_view* view, const dl_store* store);
 DL_API void dl_lens_refresh_view_lod(dl_lens* lens, struct dl_view* view, const dl_store* store,
                                      int32_t minLod, int32_t maxLod);
+
+/* Mixed-type predicate System: a float-valued op (targetCol = targetCol OP operand) applied to every
+ * live row where an INT32 predicate column satisfies (cmp threshold). The branchless one-pass form of
+ * "gate a float-attribute effect by an int tag-bitmask column" (cmp 7/8/9 = HasAll/HasAny/Lacks bits).
+ * Returns rows affected. */
+DL_API uint64_t dl_lens_run_f32_pred_i32(dl_lens* lens, dl_store* store, uint64_t targetCol, int32_t op,
+                                         float operand, uint64_t compareCol, int32_t cmp, int32_t threshold);
+
+/* The mirror: an INT32 op gated by a FLOAT predicate column (e.g. knock out an int eligibility flag
+ * where a float resource column is below a threshold). Returns rows affected. */
+DL_API uint64_t dl_lens_run_i32_pred_f32(dl_lens* lens, dl_store* store, uint64_t targetCol, int32_t op,
+                                         int32_t operand, uint64_t compareCol, int32_t cmp, float threshold);
 
 /* ── Read-only DataView (A5) ───────────────────────────────────────────────
  * A row-major snapshot of selected store columns. Build with the source column indices, then Refresh

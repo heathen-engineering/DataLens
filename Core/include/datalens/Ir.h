@@ -53,6 +53,17 @@ namespace datalens
         uint16_t          _pad            = 0;
         double            operand         = 0.0;
         double            threshold       = 0.0;
+        // ── Response curve (A3.11): when applyCurve, the per-row operand (cross-column only) is passed
+        //    through this pass-level curve before the combine. Flat fields keep IrSystemOp a POD that
+        //    serialises by raw copy. ──
+        uint32_t          applyCurve      = 0; // bool
+        int32_t           curveType       = 0; // DataCurveType
+        uint32_t          curveInvert     = 0; // bool
+        uint32_t          _pad2           = 0;
+        float             curveMin        = 0.0f;
+        float             curveMax        = 1.0f;
+        float             curveP0         = 1.0f;
+        float             curveP1         = 0.0f;
 
         // ── Typed builder helpers (mirror SystemDesc factories, but store-by-index) ──
         static IrSystemOp Scalar(uint32_t storeIndex, DataLensValueType elem, uint32_t targetCol,
@@ -73,6 +84,20 @@ namespace datalens
             return o;
         }
 
+        /// Cross-column op whose per-row operand is passed through a response curve before the combine
+        /// (A3.11) — one HATE §8 consideration: `score COMBINE= curve(metricCol)`.
+        static IrSystemOp CurvedColumn(uint32_t storeIndex, DataLensValueType elem, uint32_t targetCol,
+                                       DataSystemOp op, uint32_t operandCol, const CurveSpec& curve)
+        {
+            IrSystemOp o = Column(storeIndex, elem, targetCol, op, operandCol);
+            o.applyCurve  = 1;
+            o.curveType   = static_cast<int32_t>(curve.type);
+            o.curveInvert = curve.invert ? 1u : 0u;
+            o.curveMin    = curve.min; o.curveMax = curve.max;
+            o.curveP0     = curve.p0;  o.curveP1  = curve.p1;
+            return o;
+        }
+
         IrSystemOp& WithPredicate(uint32_t compareColumn, DataCompareOp compareOp, double thr)
         {
             hasPredicate = 1; compareCol = compareColumn; cmp = compareOp; threshold = thr;
@@ -80,6 +105,17 @@ namespace datalens
         }
 
         IrSystemOp& WithLodBand(uint8_t lo, uint8_t hi) { minLod = lo; maxLod = hi; return *this; }
+
+        /// Attach a response curve to a cross-column op (operandIsColumn must already be set).
+        IrSystemOp& WithCurve(const CurveSpec& curve)
+        {
+            applyCurve  = 1;
+            curveType   = static_cast<int32_t>(curve.type);
+            curveInvert = curve.invert ? 1u : 0u;
+            curveMin    = curve.min; curveMax = curve.max;
+            curveP0     = curve.p0;  curveP1  = curve.p1;
+            return *this;
+        }
     };
 
     /// <summary>
@@ -105,7 +141,7 @@ namespace datalens
         static bool Deserialize(const uint8_t* data, std::size_t size, IrProgram& out);
 
         static constexpr uint32_t kMagic   = 0x52494C44u; // 'DLIR' little-endian
-        static constexpr uint32_t kVersion = 1u;
+        static constexpr uint32_t kVersion = 2u;           // v2: IrSystemOp gained the A3.11 curve fields
 
     private:
         std::vector<IrSystemOp> mSystems;
