@@ -539,8 +539,17 @@ namespace datalens
             if (d.store == nullptr) return 0;
             switch (d.elemType)
             {
-            case DataLensValueType::Int32: return RunOneParallelTyped<int32_t>(d);
-            case DataLensValueType::Float: return RunOneParallelTyped<float>(d);
+            case DataLensValueType::Bool:   return RunOneParallelTyped<uint8_t>(d);
+            case DataLensValueType::Int8:   return RunOneParallelTyped<int8_t>(d);
+            case DataLensValueType::UInt8:  return RunOneParallelTyped<uint8_t>(d);
+            case DataLensValueType::Int16:  return RunOneParallelTyped<int16_t>(d);
+            case DataLensValueType::UInt16: return RunOneParallelTyped<uint16_t>(d);
+            case DataLensValueType::Int32:  return RunOneParallelTyped<int32_t>(d);
+            case DataLensValueType::UInt32: return RunOneParallelTyped<uint32_t>(d);
+            case DataLensValueType::Int64:  return RunOneParallelTyped<int64_t>(d);
+            case DataLensValueType::UInt64: return RunOneParallelTyped<uint64_t>(d);
+            case DataLensValueType::Float:  return RunOneParallelTyped<float>(d);
+            case DataLensValueType::Double: return RunOneParallelTyped<double>(d);
             default: return 0;
             }
         }

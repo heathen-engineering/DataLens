@@ -396,3 +396,64 @@ TEST_CASE("lens: cross-column System in a batch (Current = min(Current, Max))", 
     REQUIRE(s.GetRaw<int32_t>(r0, 0) == 100);
     REQUIRE(s.GetRaw<int32_t>(r1, 0) == 40);
 }
+
+// A8: the SystemDesc/RunSystems dispatch must cover every column width, not just Int32/Float, so HATE can
+// pack integral attributes to their narrowest stride and still run effects/aggregation/clamp on them.
+TEST_CASE("lens: SystemDesc dispatches all column widths (A8 width-complete ops)", "[lens][a8][width]")
+{
+    datalens::Lens lens(4);
+
+    SECTION("UInt8 scalar Add")
+    {
+        std::vector<DataStoreColumnSchema> cols = {{"V", DataLensValueType::UInt8}};
+        DataStore s(cols, 4);
+        for (int i = 0; i < 4; ++i) { size_t r = s.AllocRow(); s.SetRaw<uint8_t>(r, 0, static_cast<uint8_t>(i * 10)); }
+        datalens::SystemDesc d;
+        d.store = &s; d.elemType = DataLensValueType::UInt8; d.targetCol = 0; d.op = DataSystemOp::Add; d.operand = 5;
+        std::vector<datalens::SystemDesc> batch = {d};
+        REQUIRE(lens.RunSystems(batch) == 4);
+        for (int i = 0; i < 4; ++i) REQUIRE(s.GetRaw<uint8_t>(i, 0) == static_cast<uint8_t>(i * 10 + 5));
+    }
+
+    SECTION("UInt16 cross-column Min clamp (HATE clamp primitive on a narrow column)")
+    {
+        std::vector<DataStoreColumnSchema> cols = {{"Cur", DataLensValueType::UInt16}, {"Max", DataLensValueType::UInt16}};
+        DataStore s(cols, 2);
+        size_t r0 = s.AllocRow(); size_t r1 = s.AllocRow();
+        s.SetRaw<uint16_t>(r0, 0, 5000); s.SetRaw<uint16_t>(r0, 1, 1000);
+        s.SetRaw<uint16_t>(r1, 0, 200);  s.SetRaw<uint16_t>(r1, 1, 1000);
+        datalens::SystemDesc d;
+        d.store = &s; d.elemType = DataLensValueType::UInt16; d.targetCol = 0;
+        d.op = DataSystemOp::Min; d.operandIsColumn = true; d.operandCol = 1;
+        std::vector<datalens::SystemDesc> batch = {d};
+        lens.RunSystems(batch);
+        REQUIRE(s.GetRaw<uint16_t>(r0, 0) == 1000);
+        REQUIRE(s.GetRaw<uint16_t>(r1, 0) == 200);
+    }
+
+    SECTION("UInt64 Mul past the 32-bit range")
+    {
+        std::vector<DataStoreColumnSchema> cols = {{"V", DataLensValueType::UInt64}};
+        DataStore s(cols, 2);
+        size_t r0 = s.AllocRow(); size_t r1 = s.AllocRow();
+        s.SetRaw<uint64_t>(r0, 0, 5'000'000'000ULL); s.SetRaw<uint64_t>(r1, 0, 1ULL);
+        datalens::SystemDesc d;
+        d.store = &s; d.elemType = DataLensValueType::UInt64; d.targetCol = 0; d.op = DataSystemOp::Mul; d.operand = 2;
+        std::vector<datalens::SystemDesc> batch = {d};
+        lens.RunSystems(batch);
+        REQUIRE(s.GetRaw<uint64_t>(r0, 0) == 10'000'000'000ULL);
+        REQUIRE(s.GetRaw<uint64_t>(r1, 0) == 2ULL);
+    }
+
+    SECTION("Double scalar Add")
+    {
+        std::vector<DataStoreColumnSchema> cols = {{"V", DataLensValueType::Double}};
+        DataStore s(cols, 1);
+        size_t r0 = s.AllocRow(); s.SetRaw<double>(r0, 0, 1.5);
+        datalens::SystemDesc d;
+        d.store = &s; d.elemType = DataLensValueType::Double; d.targetCol = 0; d.op = DataSystemOp::Add; d.operand = 0.25;
+        std::vector<datalens::SystemDesc> batch = {d};
+        lens.RunSystems(batch);
+        REQUIRE(s.GetRaw<double>(r0, 0) == 1.75);
+    }
+}
