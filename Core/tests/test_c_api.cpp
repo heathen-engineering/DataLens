@@ -3,9 +3,12 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "TestTags.h"
+
 #include "datalens/c_api.h"
 
 #include <cstdint>
+#include <cstring>
 
 namespace
 {
@@ -20,10 +23,10 @@ TEST_CASE("c_api: abi version", "[c_api]")
 
 TEST_CASE("c_api: create / shape / typed round-trip / validity", "[c_api]")
 {
-    const char* names[] = {"Health", "Team", "Stamina"};
-    const int32_t types[] = {kFloat, kInt32, kDouble};
+    uint64_t names[] = {Tag("Health"), Tag("Team"), Tag("Stamina")};
+    const uint64_t strides[] = {4, 4, 8};
 
-    dl_store* s = dl_store_create(names, types, 3, 8);
+    dl_store* s = dl_store_create(names, strides, nullptr, 3, 8);
     REQUIRE(s != nullptr);
     REQUIRE(dl_store_row_count(s) == 8);
     REQUIRE(dl_store_column_count(s) == 3);
@@ -55,9 +58,9 @@ TEST_CASE("c_api: create / shape / typed round-trip / validity", "[c_api]")
 
 TEST_CASE("c_api: alloc / free / live count (A2)", "[c_api]")
 {
-    const char* names[] = {"V"};
-    const int32_t types[] = {kFloat};
-    dl_store* s = dl_store_create(names, types, 1, 2);
+    uint64_t names[] = {Tag("V")};
+    const uint64_t strides[] = {4};
+    dl_store* s = dl_store_create(names, strides, nullptr, 1, 2);
     REQUIRE(s != nullptr);
     REQUIRE(dl_store_live_count(s) == 0);
 
@@ -78,9 +81,9 @@ TEST_CASE("c_api: alloc / free / live count (A2)", "[c_api]")
 
 TEST_CASE("c_api: run system (A3)", "[c_api]")
 {
-    const char* names[] = {"HP"};
-    const int32_t types[] = {kInt32};
-    dl_store* s = dl_store_create(names, types, 1, 4);
+    uint64_t names[] = {Tag("HP")};
+    const uint64_t strides[] = {4};
+    dl_store* s = dl_store_create(names, strides, nullptr, 1, 4);
     REQUIRE(s != nullptr);
 
     uint64_t r0 = dl_store_alloc_row(s);
@@ -103,9 +106,9 @@ TEST_CASE("c_api: run system (A3)", "[c_api]")
 
 TEST_CASE("c_api: run cross-column system (A3.3)", "[c_api]")
 {
-    const char* names[] = {"Current", "Max"};
-    const int32_t types[] = {kInt32, kInt32};
-    dl_store* s = dl_store_create(names, types, 2, 4);
+    uint64_t names[] = {Tag("Current"), Tag("Max")};
+    const uint64_t strides[] = {4, 4};
+    dl_store* s = dl_store_create(names, strides, nullptr, 2, 4);
     REQUIRE(s != nullptr);
 
     uint64_t r0 = dl_store_alloc_row(s);
@@ -135,9 +138,9 @@ TEST_CASE("c_api: run cross-column system (A3.3)", "[c_api]")
 
 TEST_CASE("c_api: curved cross-column System via the Lens (A3.11)", "[c_api]")
 {
-    const char* names[] = {"Metric", "Score"};
-    const int32_t types[] = {kFloat, kFloat};
-    dl_store* s = dl_store_create(names, types, 2, 4);
+    uint64_t names[] = {Tag("Metric"), Tag("Score")};
+    const uint64_t strides[] = {4, 4};
+    dl_store* s = dl_store_create(names, strides, nullptr, 2, 4);
     REQUIRE(s != nullptr);
 
     uint64_t r0 = dl_store_alloc_row(s); dl_store_set_f32(s, r0, 0, 0.0f);   dl_store_set_f32(s, r0, 1, 0.0f);
@@ -165,9 +168,9 @@ TEST_CASE("c_api: curved cross-column System via the Lens (A3.11)", "[c_api]")
 
 TEST_CASE("c_api: counter-based noise fill + perturb via the Lens (A3.12)", "[c_api]")
 {
-    const char* names[] = {"Score", "Variance"};
-    const int32_t types[] = {kFloat, kFloat};
-    dl_store* s = dl_store_create(names, types, 2, 4);
+    uint64_t names[] = {Tag("Score"), Tag("Variance")};
+    const uint64_t strides[] = {4, 4};
+    dl_store* s = dl_store_create(names, strides, nullptr, 2, 4);
     REQUIRE(s != nullptr);
 
     uint64_t r0 = dl_store_alloc_row(s); dl_store_set_f32(s, r0, 0, 10.0f); dl_store_set_f32(s, r0, 1, 0.0f);
@@ -201,9 +204,9 @@ TEST_CASE("c_api: counter-based noise fill + perturb via the Lens (A3.12)", "[c_
 
 TEST_CASE("c_api: argmax-across-columns via the Lens (A3.13)", "[c_api]")
 {
-    const char* names[] = {"S0", "S1", "S2", "Choice"};
-    const int32_t types[] = {kFloat, kFloat, kFloat, kInt32};
-    dl_store* s = dl_store_create(names, types, 4, 3);
+    uint64_t names[] = {Tag("S0"), Tag("S1"), Tag("S2"), Tag("Choice")};
+    const uint64_t strides[] = {4, 4, 4, 4};
+    dl_store* s = dl_store_create(names, strides, nullptr, 4, 3);
     REQUIRE(s != nullptr);
 
     uint64_t r0 = dl_store_alloc_row(s); dl_store_set_f32(s, r0, 0, 0.9f); dl_store_set_f32(s, r0, 1, 0.1f); dl_store_set_f32(s, r0, 2, 0.3f);
@@ -230,9 +233,9 @@ TEST_CASE("c_api: argmax-across-columns via the Lens (A3.13)", "[c_api]")
 
 TEST_CASE("c_api: run batched Systems via the Lens (A3.4)", "[c_api]")
 {
-    const char* names[] = {"A", "B"};
-    const int32_t types[] = {kInt32, kInt32};
-    dl_store* s = dl_store_create(names, types, 2, 4);
+    uint64_t names[] = {Tag("A"), Tag("B")};
+    const uint64_t strides[] = {4, 4};
+    dl_store* s = dl_store_create(names, strides, nullptr, 2, 4);
     REQUIRE(s != nullptr);
 
     uint64_t r0 = dl_store_alloc_row(s);
@@ -265,9 +268,9 @@ TEST_CASE("c_api: run batched Systems via the Lens (A3.4)", "[c_api]")
 
 TEST_CASE("c_api: per-row LOD + batch LOD band (A3.5)", "[c_api]")
 {
-    const char* names[] = {"HP"};
-    const int32_t types[] = {kInt32};
-    dl_store* s = dl_store_create(names, types, 1, 4);
+    uint64_t names[] = {Tag("HP")};
+    const uint64_t strides[] = {4};
+    dl_store* s = dl_store_create(names, strides, nullptr, 1, 4);
     REQUIRE(s != nullptr);
 
     uint64_t r0 = dl_store_alloc_row(s); // LOD 0
@@ -299,9 +302,9 @@ TEST_CASE("c_api: per-row LOD + batch LOD band (A3.5)", "[c_api]")
 
 TEST_CASE("c_api: IR build + execute + serialize round-trip (A4.2)", "[c_api]")
 {
-    const char* names[] = {"V"};
-    const int32_t types[] = {kInt32};
-    dl_store* s = dl_store_create(names, types, 1, 4);
+    uint64_t names[] = {Tag("V")};
+    const uint64_t strides[] = {4};
+    dl_store* s = dl_store_create(names, strides, nullptr, 1, 4);
     for (int i = 0; i < 4; ++i) { uint64_t r = dl_store_alloc_row(s); dl_store_set_i32(s, r, 0, i); }
 
     dl_ir_program* prog = dl_ir_create();
@@ -334,9 +337,9 @@ TEST_CASE("c_api: IR build + execute + serialize round-trip (A4.2)", "[c_api]")
 
 TEST_CASE("c_api: tick loop runs scheduled program then refreshes scheduled view (A4.2)", "[c_api]")
 {
-    const char* names[] = {"V"};
-    const int32_t types[] = {kInt32};
-    dl_store* s = dl_store_create(names, types, 1, 3);
+    uint64_t names[] = {Tag("V")};
+    const uint64_t strides[] = {4};
+    dl_store* s = dl_store_create(names, strides, nullptr, 1, 3);
     for (int i = 0; i < 3; ++i) dl_store_alloc_row(s); // all V = 0
 
     dl_ir_program* prog = dl_ir_create();
@@ -374,9 +377,80 @@ TEST_CASE("c_api: tick loop runs scheduled program then refreshes scheduled view
 
 TEST_CASE("c_api: null/invalid args are safe", "[c_api]")
 {
-    REQUIRE(dl_store_create(nullptr, nullptr, 0, 0) == nullptr);
+    REQUIRE(dl_store_create(nullptr, nullptr, nullptr, 0, 0) == nullptr);
     REQUIRE(dl_store_row_count(nullptr) == 0);
     float f = 0;
     REQUIRE(dl_store_get_f32(nullptr, 0, 0, &f) == 0);
     dl_store_destroy(nullptr); // no-op, no crash
+}
+
+TEST_CASE("c_api: read/write view round-trips refresh -> edit -> commit", "[c_api]")
+{
+    uint64_t tags[] = {Tag("Health")};
+    const uint64_t strides[] = {4};
+    dl_store* s = dl_store_create(tags, strides, nullptr, 1, 4);
+    REQUIRE(s != nullptr);
+    for (int i = 0; i < 3; ++i)
+    {
+        uint64_t r = dl_store_alloc_row(s);
+        dl_store_set_i32(s, r, 0, 10 * (i + 1));
+    }
+
+    dl_view_column cols[] = {{0, 0}};
+    dl_rwview* v = dl_rwview_create(0, nullptr, 0, cols, 1, nullptr, 0);
+    REQUIRE(v != nullptr);
+
+    dl_view_write upd[] = {{0, 0, 0}}; // viewCol0 -> store0 col0
+    dl_rwview_set_writeback(v, nullptr, 0, upd, 1, nullptr, 0);
+
+    const dl_store* table[] = {s};
+    dl_rwview_refresh(v, table, 1);
+    REQUIRE(dl_rwview_row_count(v) == 3);
+    REQUIRE(dl_rwview_row_stride(v) == 4);
+
+    int32_t first = 0;
+    std::memcpy(&first, dl_rwview_data(v) + dl_rwview_column_offset(v, 0), sizeof(first));
+    REQUIRE(first == 10);
+
+    // Edit row 0 in the payload, mark Modified, commit back to the store.
+    int32_t nv = 999;
+    std::memcpy(dl_rwview_mutable_data(v) + 0 * dl_rwview_row_stride(v) + dl_rwview_column_offset(v, 0),
+                &nv, sizeof(nv));
+    dl_rwview_set_state(v, 0, /*Modified*/ 1);
+
+    dl_store* mtable[] = {s};
+    REQUIRE(dl_rwview_commit(v, mtable, 1) == 1);
+
+    int32_t got = 0;
+    dl_store_get_i32(s, 0, 0, &got);
+    REQUIRE(got == 999);
+
+    dl_rwview_destroy(v);
+    dl_store_destroy(s);
+}
+
+TEST_CASE("c_api: AllocRow seeds new rows from per-column defaults", "[c_api]")
+{
+    uint64_t tags[] = {Tag("CatMagicIdx"), Tag("Health")};
+    const uint64_t strides[] = {4, 4};
+
+    // Concatenated defaults: a catalogue index defaulting to int32.Max (absent), Health defaulting to 100.
+    int32_t absent = 2147483647; // int32.Max
+    float   hp100  = 100.0f;
+    uint8_t defaults[8];
+    std::memcpy(defaults + 0, &absent, 4);
+    std::memcpy(defaults + 4, &hp100, 4);
+
+    dl_store* s = dl_store_create(tags, strides, defaults, 2, 4);
+    REQUIRE(s != nullptr);
+
+    uint64_t r = dl_store_alloc_row(s);
+    int32_t idx = 0;
+    float hp = 0.0f;
+    dl_store_get_i32(s, r, 0, &idx);
+    dl_store_get_f32(s, r, 1, &hp);
+    REQUIRE(idx == 2147483647); // seeded with the absent sentinel
+    REQUIRE(hp == 100.0f);       // seeded with the default
+
+    dl_store_destroy(s);
 }

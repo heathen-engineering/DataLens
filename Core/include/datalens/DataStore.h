@@ -196,6 +196,13 @@ public:
 	/// </summary>
 	const uint8_t* GetColumnRaw(size_t col) const;
 
+	/// <summary>
+	/// Stride-bounded, type-blind raw write (DataLens-Spec.md §5): copies <c>min(srcLen, stride)</c> bytes
+	/// from <paramref name="src"/> into cell (row, col); an over-long source truncates (low bytes), a short
+	/// source zero-fills the rest of the cell. The View write-back commit uses this. No-op if out of range.
+	/// </summary>
+	void WriteCellRaw(size_t row, size_t col, const uint8_t* src, size_t srcLen);
+
 	/// <summary>Sentinel for a System's predicate type meaning "same type as the operand/target" — the
 	/// default. A different value (Int32/Float) selects a mixed-type predicate (see the System kernel).</summary>
 	static constexpr DataLensValueType kSameType = static_cast<DataLensValueType>(-1);
@@ -629,9 +636,6 @@ public:
 	/// <returns></returns>
 	size_t GetRowStride() const;
 	void ConvertToSchema(const DataStoreSchema& newSchema);
-	bool CompareCells(size_t rowA, size_t columnA, const DataStore& other, size_t rowB, size_t columnB) const;
-	void CopyCellToFlatRow(size_t rowIndex, size_t columnIndex, void* dst) const;
-	bool MatchesPredicate(size_t rowIndex, const DataQueryPredicate& pred) const;
 
 private:
 	/// <summary>

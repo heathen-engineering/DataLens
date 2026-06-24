@@ -3,6 +3,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "TestTags.h"
+
 #include "datalens/DataStore.h"
 #include "datalens/Lens.h"
 
@@ -14,7 +16,7 @@ namespace
     // A store of `rows` live Int32 rows where HP[r] = r % 200.
     DataStore MakeBigStore(size_t rows)
     {
-        std::vector<DataStoreColumnSchema> cols = {{"HP", DataLensValueType::Int32}};
+        std::vector<DataStoreColumnSchema> cols = {{Tag("HP"), DataLensValueType::Int32}};
         DataStore s(cols, rows);
         for (size_t r = 0; r < rows; ++r)
         {
@@ -77,8 +79,8 @@ namespace
     // Two Int32 columns over `rows` live rows: Current[r] = r % 200, Regen[r] = r % 7.
     DataStore MakeTwoColStore(size_t rows)
     {
-        std::vector<DataStoreColumnSchema> cols = {{"Current", DataLensValueType::Int32},
-                                                   {"Regen",   DataLensValueType::Int32}};
+        std::vector<DataStoreColumnSchema> cols = {{Tag("Current"), DataLensValueType::Int32},
+                                                   {Tag("Regen"),   DataLensValueType::Int32}};
         DataStore s(cols, rows);
         for (size_t r = 0; r < rows; ++r)
         {
@@ -136,9 +138,9 @@ namespace
 TEST_CASE("lens: batch of independent Systems matches running them one by one", "[lens]")
 {
     // Three independent columns; a System per column. Independent -> one concurrent wave.
-    std::vector<DataStoreColumnSchema> cols = {{"A", DataLensValueType::Int32},
-                                               {"B", DataLensValueType::Int32},
-                                               {"C", DataLensValueType::Int32}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("A"), DataLensValueType::Int32},
+                                               {Tag("B"), DataLensValueType::Int32},
+                                               {Tag("C"), DataLensValueType::Int32}};
     const size_t rows = 5000;
     auto build = [&]() {
         DataStore s(cols, rows);
@@ -179,7 +181,7 @@ TEST_CASE("lens: batch preserves submission order for conflicting Systems", "[le
 {
     // Two Systems write the SAME column: x += 1 then x *= 2. They conflict, so they must run in
     // order (separate waves) -> (x+1)*2, never x*2+1.
-    std::vector<DataStoreColumnSchema> cols = {{"X", DataLensValueType::Int32}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("X"), DataLensValueType::Int32}};
     const size_t rows = 4000;
     DataStore s(cols, rows);
     for (size_t r = 0; r < rows; ++r)
@@ -198,7 +200,7 @@ TEST_CASE("lens: batch preserves submission order for conflicting Systems", "[le
 
 TEST_CASE("lens: batch spans multiple stores", "[lens]")
 {
-    std::vector<DataStoreColumnSchema> cols = {{"V", DataLensValueType::Int32}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("V"), DataLensValueType::Int32}};
     DataStore s1(cols, 3);
     DataStore s2(cols, 3);
     s1.SetRaw<int32_t>(s1.AllocRow(), 0, 5);
@@ -219,7 +221,7 @@ TEST_CASE("lens: LOD-banded System parallel result matches single-threaded", "[l
 {
     const size_t rows = 60000;
     auto build = [&]() {
-        std::vector<DataStoreColumnSchema> cols = {{"HP", DataLensValueType::Int32}};
+        std::vector<DataStoreColumnSchema> cols = {{Tag("HP"), DataLensValueType::Int32}};
         DataStore s(cols, rows);
         for (size_t r = 0; r < rows; ++r)
         {
@@ -246,7 +248,7 @@ TEST_CASE("lens: LOD-banded System parallel result matches single-threaded", "[l
 
 TEST_CASE("lens: batch honours a per-batch LOD band via SystemDesc", "[lens][lod]")
 {
-    std::vector<DataStoreColumnSchema> cols = {{"A", DataLensValueType::Int32}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("A"), DataLensValueType::Int32}};
     DataStore s(cols, 3);
     size_t r0 = s.AllocRow(); s.SetRaw<int32_t>(r0, 0, 0); s.SetLod(r0, 0);
     size_t r1 = s.AllocRow(); s.SetRaw<int32_t>(r1, 0, 0); s.SetLod(r1, 1);
@@ -269,8 +271,8 @@ TEST_CASE("lens: interleaved-conflict batch still equals sequential order", "[le
     // Two columns, ops interleaved: A+=1 (col0), B+=1 (col1), A*=2 (col0), B*=2 (col1).
     // Consecutive packing would make 3 waves; level scheduling packs {0:[op0,op1],1:[op2,op3]} (2),
     // but either way the result must equal applying the ops in submission order.
-    std::vector<DataStoreColumnSchema> cols = {{"A", DataLensValueType::Int32},
-                                               {"B", DataLensValueType::Int32}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("A"), DataLensValueType::Int32},
+                                               {Tag("B"), DataLensValueType::Int32}};
     const size_t rows = 4000;
     auto build = [&]() {
         DataStore s(cols, rows);
@@ -311,7 +313,7 @@ TEST_CASE("lens: interleaved-conflict batch still equals sequential order", "[le
 TEST_CASE("lens: long conflicting chain on one column stays ordered", "[lens]")
 {
     // A chain of conflicting ops on a single column must serialise into N levels in order.
-    std::vector<DataStoreColumnSchema> cols = {{"X", DataLensValueType::Int32}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("X"), DataLensValueType::Int32}};
     const size_t rows = 1000;
     DataStore s(cols, rows);
     for (size_t r = 0; r < rows; ++r)
@@ -331,8 +333,8 @@ TEST_CASE("lens: scaled cross-column parallel matches single-threaded", "[lens][
 {
     const size_t rows = 80000;
     auto build = [&]() {
-        std::vector<DataStoreColumnSchema> cols = {{"Pos", DataLensValueType::Float},
-                                                   {"Vel", DataLensValueType::Float}};
+        std::vector<DataStoreColumnSchema> cols = {{Tag("Pos"), DataLensValueType::Float},
+                                                   {Tag("Vel"), DataLensValueType::Float}};
         DataStore s(cols, rows);
         for (size_t r = 0; r < rows; ++r)
         {
@@ -357,8 +359,8 @@ TEST_CASE("lens: scaled cross-column parallel matches single-threaded", "[lens][
 
 TEST_CASE("lens: scaled cross-column via SystemDesc in a batch", "[lens][scaled]")
 {
-    std::vector<DataStoreColumnSchema> cols = {{"Pos", DataLensValueType::Float},
-                                               {"Vel", DataLensValueType::Float}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("Pos"), DataLensValueType::Float},
+                                               {Tag("Vel"), DataLensValueType::Float}};
     DataStore s(cols, 2);
     size_t r0 = s.AllocRow(); s.SetRaw<float>(r0, 0, 0.0f); s.SetRaw<float>(r0, 1, 8.0f);
 
@@ -377,8 +379,8 @@ TEST_CASE("lens: scaled cross-column via SystemDesc in a batch", "[lens][scaled]
 
 TEST_CASE("lens: cross-column System in a batch (Current = min(Current, Max))", "[lens]")
 {
-    std::vector<DataStoreColumnSchema> cols = {{"Current", DataLensValueType::Int32},
-                                               {"Max",     DataLensValueType::Int32}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("Current"), DataLensValueType::Int32},
+                                               {Tag("Max"),     DataLensValueType::Int32}};
     DataStore s(cols, 2);
     size_t r0 = s.AllocRow();
     size_t r1 = s.AllocRow();
@@ -405,7 +407,7 @@ TEST_CASE("lens: SystemDesc dispatches all column widths (A8 width-complete ops)
 
     SECTION("UInt8 scalar Add")
     {
-        std::vector<DataStoreColumnSchema> cols = {{"V", DataLensValueType::UInt8}};
+        std::vector<DataStoreColumnSchema> cols = {{Tag("V"), DataLensValueType::UInt8}};
         DataStore s(cols, 4);
         for (int i = 0; i < 4; ++i) { size_t r = s.AllocRow(); s.SetRaw<uint8_t>(r, 0, static_cast<uint8_t>(i * 10)); }
         datalens::SystemDesc d;
@@ -417,7 +419,7 @@ TEST_CASE("lens: SystemDesc dispatches all column widths (A8 width-complete ops)
 
     SECTION("UInt16 cross-column Min clamp (HATE clamp primitive on a narrow column)")
     {
-        std::vector<DataStoreColumnSchema> cols = {{"Cur", DataLensValueType::UInt16}, {"Max", DataLensValueType::UInt16}};
+        std::vector<DataStoreColumnSchema> cols = {{Tag("Cur"), DataLensValueType::UInt16}, {Tag("Max"), DataLensValueType::UInt16}};
         DataStore s(cols, 2);
         size_t r0 = s.AllocRow(); size_t r1 = s.AllocRow();
         s.SetRaw<uint16_t>(r0, 0, 5000); s.SetRaw<uint16_t>(r0, 1, 1000);
@@ -433,7 +435,7 @@ TEST_CASE("lens: SystemDesc dispatches all column widths (A8 width-complete ops)
 
     SECTION("UInt64 Mul past the 32-bit range")
     {
-        std::vector<DataStoreColumnSchema> cols = {{"V", DataLensValueType::UInt64}};
+        std::vector<DataStoreColumnSchema> cols = {{Tag("V"), DataLensValueType::UInt64}};
         DataStore s(cols, 2);
         size_t r0 = s.AllocRow(); size_t r1 = s.AllocRow();
         s.SetRaw<uint64_t>(r0, 0, 5'000'000'000ULL); s.SetRaw<uint64_t>(r1, 0, 1ULL);
@@ -447,7 +449,7 @@ TEST_CASE("lens: SystemDesc dispatches all column widths (A8 width-complete ops)
 
     SECTION("Double scalar Add")
     {
-        std::vector<DataStoreColumnSchema> cols = {{"V", DataLensValueType::Double}};
+        std::vector<DataStoreColumnSchema> cols = {{Tag("V"), DataLensValueType::Double}};
         DataStore s(cols, 1);
         size_t r0 = s.AllocRow(); s.SetRaw<double>(r0, 0, 1.5);
         datalens::SystemDesc d;

@@ -119,6 +119,22 @@ const uint8_t* DataStore::GetColumnRaw(size_t col) const
 	return mColumnsData[col].data();
 }
 
+void DataStore::WriteCellRaw(size_t row, size_t col, const uint8_t* src, size_t srcLen)
+{
+	if (col >= mColumns.size() || row >= mRowCount || src == nullptr)
+	{
+		return;
+	}
+	const size_t stride = mColumns[col].GetStride();
+	uint8_t* dst = GetRawCellMutable(row, col);
+	const size_t n = std::min(srcLen, stride);
+	std::memcpy(dst, src, n);
+	if (n < stride)
+	{
+		std::memset(dst + n, 0, stride - n); // short source zero-fills the rest of the cell (§5)
+	}
+}
+
 namespace
 {
 	inline unsigned CtzU64(uint64_t x)
@@ -243,6 +259,25 @@ size_t DataStore::AllocRow()
 			mLodLevels[row] = 0; // a freshly allocated row starts at full fidelity
 			++mLiveCount;
 			mAllocCursor = wi;
+
+			// Seed the row from each column's default (or zero) so a new / reused row starts clean (Â§5).
+			for (size_t c = 0; c < mColumns.size(); ++c)
+			{
+				const size_t stride = mColumns[c].GetStride();
+				uint8_t* cell = mColumnsData[c].data() + row * stride;
+				const std::vector<uint8_t>& def = mColumns[c].DefaultValue;
+				if (!def.empty())
+				{
+					const size_t n = std::min(stride, def.size());
+					std::memcpy(cell, def.data(), n);
+					if (n < stride) std::memset(cell + n, 0, stride - n);
+				}
+				else
+				{
+					std::memset(cell, 0, stride);
+				}
+			}
+
 			return row;
 		}
 	}
@@ -315,20 +350,20 @@ void DataStore::ConvertToSchema(const DataStoreSchema& newSchema)
 		ColumnBuffer newColData(rowCount * newStride, 0); // zero-initialize (cache-line-aligned)
 
 		auto it = std::find_if(mColumns.begin(), mColumns.end(),
-		                       [&newCol](const DataStoreColumnSchema& oldCol) { return oldCol.Name == newCol.Name; });
+		                       [&newCol](const DataStoreColumnSchema& oldCol) { return oldCol.Tag == newCol.Tag; });
 
 		if (it != mColumns.end())
 		{
 			size_t oldStride = it->GetStride();
 			size_t colIndex = std::distance(mColumns.begin(), it);
 			const ColumnBuffer& oldData = mColumnsData[colIndex];
+			size_t copySize = std::min(oldStride, newStride);
 
 			for (size_t row = 0; row < rowCount; ++row)
 			{
-				const uint8_t* src = oldData.data() + row * oldStride;
-				uint8_t* dst = newColData.data() + row * newStride;
-
-				DataLensValueTypeUtils::ConvertData(src, it->Type, dst, newCol.Type);
+				// Type-blind migration: copy the raw bytes, stride-bounded (newColData is zero-filled, so
+				// a wider new stride zero-extends and a narrower one truncates the low bytes).
+				std::memcpy(newColData.data() + row * newStride, oldData.data() + row * oldStride, copySize);
 			}
 		}
 		else if (!newCol.DefaultValue.empty())
@@ -350,121 +385,6 @@ void DataStore::ConvertToSchema(const DataStoreSchema& newSchema)
 
 	mColumns = newSchema.Columns;
 	mColumnsData = std::move(newColumnsData);
-}
-
-bool DataStore::CompareCells(size_t rowA, size_t columnA, const DataStore& other, size_t rowB, size_t columnB) const
-{
-	if (columnA >= mColumns.size() || columnB >= other.mColumns.size())
-	{
-		throw std::out_of_range("Column index out of range");
-	}
-
-	const DataStoreColumnSchema& colA = mColumns[columnA];
-	const DataStoreColumnSchema& colB = other.mColumns[columnB];
-
-	uint8_t bufferA[16]; // max GUID
-	uint8_t bufferB[16];
-
-	const void* srcA = GetCellPointer(rowA, columnA);
-	const void* srcB = other.GetCellPointer(rowB, columnB);
-
-	DataLensValueTypeUtils::ConvertData(srcA, colA.Type, bufferA, colA.Type);
-	DataLensValueTypeUtils::ConvertData(srcB, colB.Type, bufferB, colA.Type);
-
-	return std::memcmp(bufferA, bufferB, colA.GetStride()) == 0;
-}
-
-void DataStore::CopyCellToFlatRow(size_t rowIndex, size_t columnIndex, void* dst) const
-{
-	if (columnIndex >= mColumns.size())
-	{
-		throw std::out_of_range("Column index out of range");
-	}
-
-	const DataStoreColumnSchema& col = mColumns[columnIndex];
-	const void* src = GetCellPointer(rowIndex, columnIndex);
-
-	DataLensValueTypeUtils::ConvertData(src, col.Type, dst, col.Type);
-}
-
-bool DataStore::MatchesPredicate(size_t rowIndex, const DataQueryPredicate& pred) const
-{
-	if (rowIndex >= mRowCount || pred.ColumnIndex >= mColumns.size())
-	{
-		throw std::out_of_range("Row or column index out of range");
-	}
-
-	const DataStoreColumnSchema& col = mColumns[pred.ColumnIndex];
-
-	// Allocate temporary storage for conversion
-	uint8_t buffer[16]; // max size for GUID
-
-	const void* src = GetRawCell(rowIndex, pred.ColumnIndex);
-
-	// Convert cell to the type of the predicate
-	DataLensValueTypeUtils::ConvertData(src, col.Type, buffer, pred.ColumnType);
-
-	switch (pred.ColumnType)
-	{
-	case DataLensValueType::Bool:
-	case DataLensValueType::Int8:
-	case DataLensValueType::Int16:
-	case DataLensValueType::Int32:
-	case DataLensValueType::Int64:
-	case DataLensValueType::UInt8:
-	case DataLensValueType::UInt16:
-	case DataLensValueType::UInt32:
-	case DataLensValueType::UInt64:
-		{
-			int64_t cellValue = 0;
-			std::memcpy(&cellValue, buffer, sizeof(cellValue));
-
-			switch (pred.Op)
-			{
-			case DataQueryOperator::Equals: return cellValue == pred.IntValue;
-			case DataQueryOperator::NotEquals: return cellValue != pred.IntValue;
-			case DataQueryOperator::Less: return cellValue < pred.IntValue;
-			case DataQueryOperator::LessOrEqual: return cellValue <= pred.IntValue;
-			case DataQueryOperator::Greater: return cellValue > pred.IntValue;
-			case DataQueryOperator::GreaterOrEqual: return cellValue >= pred.IntValue;
-			case DataQueryOperator::Range: return cellValue >= pred.IntValue && cellValue <= pred.IntValueHigh;
-			default: throw std::logic_error("Unsupported operator for integer type");
-			}
-		}
-
-	case DataLensValueType::Float:
-	case DataLensValueType::Double:
-		{
-			double cellValue = 0.0;
-			std::memcpy(&cellValue, buffer, sizeof(cellValue));
-
-			switch (pred.Op)
-			{
-			case DataQueryOperator::Equals: return cellValue == pred.DoubleValue;
-			case DataQueryOperator::NotEquals: return cellValue != pred.DoubleValue;
-			case DataQueryOperator::Less: return cellValue < pred.DoubleValue;
-			case DataQueryOperator::LessOrEqual: return cellValue <= pred.DoubleValue;
-			case DataQueryOperator::Greater: return cellValue > pred.DoubleValue;
-			case DataQueryOperator::GreaterOrEqual: return cellValue >= pred.DoubleValue;
-			case DataQueryOperator::Range: return cellValue >= pred.DoubleValue && cellValue <= pred.DoubleValueHigh;
-			default: throw std::logic_error("Unsupported operator for floating type");
-			}
-		}
-
-	case DataLensValueType::GUID:
-		{
-			if (pred.Op != DataQueryOperator::Equals && pred.Op != DataQueryOperator::NotEquals)
-			{
-				throw std::logic_error("GUID supports only Equals/NotEquals");
-			}
-
-			bool equal = std::memcmp(buffer, &pred.UIntValue, 16) == 0;
-			return pred.Op == DataQueryOperator::Equals ? equal : !equal;
-		}
-
-	default:
-		throw std::logic_error("Unsupported DataType in predicate evaluation");
-	}
 }
 
 /// <summary>

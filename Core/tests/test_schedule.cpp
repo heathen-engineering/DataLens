@@ -3,6 +3,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "TestTags.h"
+
 #include "datalens/DataStore.h"
 #include "datalens/DataView.h"
 #include "datalens/Ir.h"
@@ -21,7 +23,7 @@ namespace
     {
         std::vector<DataStoreColumnSchema> schema;
         for (size_t c = 0; c < cols; ++c)
-            schema.push_back({"c" + std::to_string(c), DataLensValueType::Int32});
+            schema.push_back({Tag("c" + std::to_string(c)), DataLensValueType::Int32});
         DataStore s(schema, rows);
         for (size_t r = 0; r < rows; ++r)
             s.AllocRow();

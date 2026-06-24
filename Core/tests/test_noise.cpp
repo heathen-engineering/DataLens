@@ -4,6 +4,8 @@
 // HATE-Spec §8.4 (`Score' = Score + Variance * Noise`): determinism is the default, variance is opt-in.
 
 #include <catch2/catch_test_macros.hpp>
+
+#include "TestTags.h"
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include "datalens/DataStore.h"
@@ -19,8 +21,8 @@ namespace
     DataStore MakeNoiseStore(size_t n, float scoreInit, float varianceInit)
     {
         std::vector<DataStoreColumnSchema> cols = {
-            {"Score",    DataLensValueType::Float},
-            {"Variance", DataLensValueType::Float},
+            {Tag("Score"),    DataLensValueType::Float},
+            {Tag("Variance"), DataLensValueType::Float},
         };
         DataStore s(cols, n);
         for (size_t r = 0; r < n; ++r)

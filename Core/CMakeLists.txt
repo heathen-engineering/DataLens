@@ -21,11 +21,11 @@ endif()
 add_library(datalens_objects OBJECT
     src/DataStore.cpp
     src/DataLensSchema.cpp
-    src/DataLens.cpp
     src/c_api.cpp
     src/ThreadPool.cpp
     src/Ir.cpp
     src/DataView.cpp
+    src/View.cpp
     src/log.cpp)
 target_include_directories(datalens_objects PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

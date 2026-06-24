@@ -2,6 +2,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "TestTags.h"
+
 #include "datalens/DataStore.h"
 #include "datalens/Ir.h"
 #include "datalens/Lens.h"
@@ -17,7 +19,7 @@ namespace
     // One Int32 column store with `rows` live rows, V[r] = r.
     DataStore MakeStore(size_t rows)
     {
-        std::vector<DataStoreColumnSchema> cols = {{"V", DataLensValueType::Int32}};
+        std::vector<DataStoreColumnSchema> cols = {{Tag("V"), DataLensValueType::Int32}};
         DataStore s(cols, rows);
         for (size_t r = 0; r < rows; ++r)
             s.SetRaw<int32_t>(s.AllocRow(), 0, static_cast<int32_t>(r));
@@ -45,8 +47,8 @@ TEST_CASE("ir: execute matches direct Systems", "[ir]")
 
 TEST_CASE("ir: cross-column + predicate + lod ops round through the IR", "[ir]")
 {
-    std::vector<DataStoreColumnSchema> cols = {{"Current", DataLensValueType::Int32},
-                                               {"Max",     DataLensValueType::Int32}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("Current"), DataLensValueType::Int32},
+                                               {Tag("Max"),     DataLensValueType::Int32}};
     DataStore s(cols, 3);
     size_t r0 = s.AllocRow(); s.SetRaw<int32_t>(r0, 0, 150); s.SetRaw<int32_t>(r0, 1, 100); s.SetLod(r0, 0);
     size_t r1 = s.AllocRow(); s.SetRaw<int32_t>(r1, 0, 40);  s.SetRaw<int32_t>(r1, 1, 100); s.SetLod(r1, 0);
@@ -68,8 +70,8 @@ TEST_CASE("ir: cross-column + predicate + lod ops round through the IR", "[ir]")
 TEST_CASE("ir: curved cross-column op round-trips and serialises (A3.11)", "[ir]")
 {
     // Metric in {0,50,100}; Score = curve(Metric) with a falling identity over [0,100] (invert).
-    std::vector<DataStoreColumnSchema> cols = {{"Metric", DataLensValueType::Float},
-                                               {"Score",  DataLensValueType::Float}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("Metric"), DataLensValueType::Float},
+                                               {Tag("Score"),  DataLensValueType::Float}};
     auto build = [&cols]() {
         DataStore s(cols, 3);
         size_t r0 = s.AllocRow(); s.SetRaw<float>(r0, 0, 0.0f);   s.SetRaw<float>(r0, 1, 0.0f);

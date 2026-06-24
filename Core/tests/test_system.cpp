@@ -2,6 +2,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "TestTags.h"
+
 #include "datalens/DataStore.h"
 
 #include <cstdint>
@@ -12,7 +14,7 @@ namespace
     // One Int32 "HP" column, capacity 4, 3 live rows: HP = {100, 30, 80}; row 3 invalid.
     DataStore MakeHpStore()
     {
-        std::vector<DataStoreColumnSchema> cols = {{"HP", DataLensValueType::Int32}};
+        std::vector<DataStoreColumnSchema> cols = {{Tag("HP"), DataLensValueType::Int32}};
         DataStore s(cols, 4);
         size_t r0 = s.AllocRow();
         size_t r1 = s.AllocRow();
@@ -67,7 +69,7 @@ TEST_CASE("system: min/max ops", "[system]")
 
 TEST_CASE("system: float clamp via Min", "[system]")
 {
-    std::vector<DataStoreColumnSchema> cols = {{"Stamina", DataLensValueType::Float}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("Stamina"), DataLensValueType::Float}};
     DataStore s(cols, 2);
     size_t a = s.AllocRow();
     size_t b = s.AllocRow();
@@ -82,8 +84,8 @@ TEST_CASE("system: float clamp via Min", "[system]")
 TEST_CASE("system: cross-column add (Current += Regen)", "[system]")
 {
     // Two Int32 columns: Current and Regen. Add Regen into Current per row.
-    std::vector<DataStoreColumnSchema> cols = {{"Current", DataLensValueType::Int32},
-                                               {"Regen",   DataLensValueType::Int32}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("Current"), DataLensValueType::Int32},
+                                               {Tag("Regen"),   DataLensValueType::Int32}};
     DataStore s(cols, 4);
     size_t r0 = s.AllocRow();
     size_t r1 = s.AllocRow();
@@ -104,8 +106,8 @@ TEST_CASE("system: cross-column add (Current += Regen)", "[system]")
 TEST_CASE("system: cross-column per-row clamp (Current = min(Current, Max))", "[system]")
 {
     // Classic HATE attribute clamp: clamp Current to a per-row Max column.
-    std::vector<DataStoreColumnSchema> cols = {{"Current", DataLensValueType::Int32},
-                                               {"Max",     DataLensValueType::Int32}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("Current"), DataLensValueType::Int32},
+                                               {Tag("Max"),     DataLensValueType::Int32}};
     DataStore s(cols, 3);
     size_t r0 = s.AllocRow();
     size_t r1 = s.AllocRow();
@@ -120,9 +122,9 @@ TEST_CASE("system: cross-column per-row clamp (Current = min(Current, Max))", "[
 TEST_CASE("system: cross-column with predicate (regen only where Alive != 0)", "[system]")
 {
     // Operand from a column AND a predicate on a third column: add Regen only where Alive != 0.
-    std::vector<DataStoreColumnSchema> cols = {{"Current", DataLensValueType::Int32},
-                                               {"Regen",   DataLensValueType::Int32},
-                                               {"Alive",   DataLensValueType::Int32}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("Current"), DataLensValueType::Int32},
+                                               {Tag("Regen"),   DataLensValueType::Int32},
+                                               {Tag("Alive"),   DataLensValueType::Int32}};
     DataStore s(cols, 3);
     size_t r0 = s.AllocRow();
     size_t r1 = s.AllocRow();
@@ -138,7 +140,7 @@ TEST_CASE("system: cross-column with predicate (regen only where Alive != 0)", "
 TEST_CASE("system: bitwise ops set/clear/toggle bits (A3.8)", "[system][bitmask]")
 {
     // Effect-flags column (HATE uses bitmask flags for effects). Bit layout per row varies.
-    std::vector<DataStoreColumnSchema> cols = {{"Flags", DataLensValueType::Int32}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("Flags"), DataLensValueType::Int32}};
     DataStore s(cols, 4);
     size_t r0 = s.AllocRow(); s.SetRaw<int32_t>(r0, 0, 0b0000);
     size_t r1 = s.AllocRow(); s.SetRaw<int32_t>(r1, 0, 0b1010);
@@ -167,8 +169,8 @@ TEST_CASE("system: bitwise ops set/clear/toggle bits (A3.8)", "[system][bitmask]
 TEST_CASE("system: bitmask predicates gate by flags (A3.8)", "[system][bitmask]")
 {
     // Two columns: Flags + HP. "If row HAS the Stunned bit (0b0010), set HP = 0."
-    std::vector<DataStoreColumnSchema> cols = {{"HP", DataLensValueType::Int32},
-                                               {"Flags", DataLensValueType::Int32}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("HP"), DataLensValueType::Int32},
+                                               {Tag("Flags"), DataLensValueType::Int32}};
     DataStore s(cols, 4);
     size_t r0 = s.AllocRow(); s.SetRaw<int32_t>(r0, 0, 100); s.SetRaw<int32_t>(r0, 1, 0b0010); // stunned
     size_t r1 = s.AllocRow(); s.SetRaw<int32_t>(r1, 0, 100); s.SetRaw<int32_t>(r1, 1, 0b0001); // not
@@ -194,8 +196,8 @@ TEST_CASE("system: bitmask predicates gate by flags (A3.8)", "[system][bitmask]"
 TEST_CASE("system: mixed-type predicate gates a float op by an int bitmask column (A3.10)", "[system][mixedpred]")
 {
     // HATE shape: HP (float) damaged where an int Flags column has the Burning bit (0b0010).
-    std::vector<DataStoreColumnSchema> cols = {{"HP", DataLensValueType::Float},
-                                               {"Flags", DataLensValueType::Int32}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("HP"), DataLensValueType::Float},
+                                               {Tag("Flags"), DataLensValueType::Int32}};
     DataStore s(cols, 4);
     size_t r0 = s.AllocRow(); s.SetRaw<float>(r0, 0, 100.0f); s.SetRaw<int32_t>(r0, 1, 0b0000);
     size_t r1 = s.AllocRow(); s.SetRaw<float>(r1, 0, 100.0f); s.SetRaw<int32_t>(r1, 1, 0b0010);
@@ -212,8 +214,8 @@ TEST_CASE("system: mixed-type predicate gates a float op by an int bitmask colum
 TEST_CASE("system: mixed-type predicate gates an int op by a float column (A3.10)", "[system][mixedpred]")
 {
     // Batch-eligibility shape: knock out an int Eligible flag where a float Mana column is below cost.
-    std::vector<DataStoreColumnSchema> cols = {{"Eligible", DataLensValueType::Int32},
-                                               {"Mana", DataLensValueType::Float}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("Eligible"), DataLensValueType::Int32},
+                                               {Tag("Mana"), DataLensValueType::Float}};
     DataStore s(cols, 3);
     size_t r0 = s.AllocRow(); s.SetRaw<int32_t>(r0, 0, 1); s.SetRaw<float>(r0, 1, 100.0f);
     size_t r1 = s.AllocRow(); s.SetRaw<int32_t>(r1, 0, 1); s.SetRaw<float>(r1, 1, 20.0f);
@@ -229,7 +231,7 @@ TEST_CASE("system: mixed-type predicate gates an int op by a float column (A3.10
 TEST_CASE("system: same-type predicate still works through the refactor", "[system][mixedpred]")
 {
     // Regression: kSameType path unchanged (float op gated by a float predicate on the same col).
-    std::vector<DataStoreColumnSchema> cols = {{"HP", DataLensValueType::Float}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("HP"), DataLensValueType::Float}};
     DataStore s(cols, 3);
     size_t r0 = s.AllocRow(); s.SetRaw<float>(r0, 0, 100.0f);
     size_t r1 = s.AllocRow(); s.SetRaw<float>(r1, 0, 30.0f);
@@ -241,7 +243,7 @@ TEST_CASE("system: same-type predicate still works through the refactor", "[syst
 
 TEST_CASE("system: bitwise op on a float column is a no-op (A3.8)", "[system][bitmask]")
 {
-    std::vector<DataStoreColumnSchema> cols = {{"V", DataLensValueType::Float}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("V"), DataLensValueType::Float}};
     DataStore s(cols, 2);
     size_t r0 = s.AllocRow(); s.SetRaw<float>(r0, 0, 3.5f);
 
@@ -259,8 +261,8 @@ TEST_CASE("system: bitwise op on a float column is a no-op (A3.8)", "[system][bi
 TEST_CASE("system: scaled cross-column = Euler integration (pos += vel * dt)", "[system][scaled]")
 {
     // Pos += Vel * dt, the canonical fused-multiply step.
-    std::vector<DataStoreColumnSchema> cols = {{"Pos", DataLensValueType::Float},
-                                               {"Vel", DataLensValueType::Float}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("Pos"), DataLensValueType::Float},
+                                               {Tag("Vel"), DataLensValueType::Float}};
     DataStore s(cols, 3);
     size_t r0 = s.AllocRow(); s.SetRaw<float>(r0, 0, 0.0f);  s.SetRaw<float>(r0, 1, 10.0f);
     size_t r1 = s.AllocRow(); s.SetRaw<float>(r1, 0, 5.0f);  s.SetRaw<float>(r1, 1, -2.0f);
@@ -277,8 +279,8 @@ TEST_CASE("system: scaled cross-column = Euler integration (pos += vel * dt)", "
 
 TEST_CASE("system: scaled cross-column integer (effective += base * mult)", "[system][scaled]")
 {
-    std::vector<DataStoreColumnSchema> cols = {{"Eff", DataLensValueType::Int32},
-                                               {"Base", DataLensValueType::Int32}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("Eff"), DataLensValueType::Int32},
+                                               {Tag("Base"), DataLensValueType::Int32}};
     DataStore s(cols, 3);
     size_t r0 = s.AllocRow(); s.SetRaw<int32_t>(r0, 0, 0); s.SetRaw<int32_t>(r0, 1, 7);
     size_t r1 = s.AllocRow(); s.SetRaw<int32_t>(r1, 0, 1); s.SetRaw<int32_t>(r1, 1, 10);
@@ -297,7 +299,7 @@ TEST_CASE("system: scaled cross-column integer (effective += base * mult)", "[sy
 
 TEST_CASE("system: cross-column out-of-range operand column is a no-op", "[system]")
 {
-    std::vector<DataStoreColumnSchema> cols = {{"Current", DataLensValueType::Int32}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("Current"), DataLensValueType::Int32}};
     DataStore s(cols, 2);
     size_t r0 = s.AllocRow();
     s.SetRaw<int32_t>(r0, 0, 7);
@@ -308,7 +310,7 @@ TEST_CASE("system: cross-column out-of-range operand column is a no-op", "[syste
 
 TEST_CASE("system: LOD defaults to 0 and round-trips", "[system][lod]")
 {
-    std::vector<DataStoreColumnSchema> cols = {{"V", DataLensValueType::Int32}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("V"), DataLensValueType::Int32}};
     DataStore s(cols, 4);
     size_t r0 = s.AllocRow();
     REQUIRE(s.GetLod(r0) == 0); // freshly allocated row is full fidelity
@@ -326,7 +328,7 @@ TEST_CASE("system: LOD defaults to 0 and round-trips", "[system][lod]")
 TEST_CASE("system: LOD band scopes which rows a System touches", "[system][lod]")
 {
     // Five rows at LOD 0,1,2,0,1; a band [0,1] System should skip the LOD-2 row.
-    std::vector<DataStoreColumnSchema> cols = {{"HP", DataLensValueType::Int32}};
+    std::vector<DataStoreColumnSchema> cols = {{Tag("HP"), DataLensValueType::Int32}};
     DataStore s(cols, 5);
     const uint8_t lods[5] = {0, 1, 2, 0, 1};
     for (int i = 0; i < 5; ++i)

@@ -38,10 +38,13 @@ DL_API int32_t dl_abi_version(void);
 DL_API int32_t dl_smallest_uint_type(uint64_t maxValue);
 DL_API int32_t dl_smallest_int_type(int64_t minValue, int64_t maxValue);
 
-/* Create a store. colNames/colTypes are parallel arrays of length colCount.
- * Returns NULL on invalid arguments. Caller owns the handle (dl_store_destroy). */
-DL_API dl_store* dl_store_create(const char* const* colNames,
-                                 const int32_t* colTypes,
+/* Create a store. colTags/colStrides are parallel arrays of length colCount: colTags are the columns'
+ * globally-unique ids (u64), colStrides their byte widths (Core is type-blind). colDefaults is the
+ * columns' default values concatenated in order (Sum(colStrides) bytes), used to seed each new row on
+ * AllocRow; pass NULL for all-zero defaults. Returns NULL on invalid args. Caller owns (dl_store_destroy). */
+DL_API dl_store* dl_store_create(const uint64_t* colTags,
+                                 const uint64_t* colStrides,
+                                 const uint8_t*  colDefaults,
                                  int32_t colCount,
                                  uint64_t preallocRows);
 
@@ -316,6 +319,105 @@ DL_API int32_t  dl_view_get_f64(const dl_view* view, uint64_t viewRow, uint64_t 
  * pointer + its byte size. For one marshalled copy into a managed array (essential at scale). */
 DL_API const void* dl_view_data(const dl_view* view);
 DL_API uint64_t    dl_view_byte_size(const dl_view* view);
+
+/* ---- The read/write View (DataLens-Spec.md §6.4): projection + index-joins + scope -> raw payload +
+ * change flags, with an Insert/Update/Delete write-back. POD mirrors of the view IR follow (all ids and
+ * indices are u64; aligned/type/op cross as int32). ---- */
+typedef struct dl_rwview dl_rwview; /* opaque handle to a datalens::View */
+
+typedef struct dl_view_join
+{
+    uint64_t target_store;
+    int32_t  aligned;          /* nonzero = index-aligned (target row == base row) */
+    uint64_t index_column;     /* (aligned=0) base column holding the target row index */
+    uint64_t absent_sentinel;  /* index value meaning "absent" (e.g. int32.Max) */
+} dl_view_join;
+
+typedef struct dl_view_column
+{
+    uint64_t source;           /* 0 = base store; k>=1 = the (k-1)th join's target */
+    uint64_t column;           /* column index within that store */
+} dl_view_column;
+
+typedef struct dl_view_scope
+{
+    uint64_t column;           /* base store column index */
+    int32_t  type;             /* DataLensValueType (interprets the cell for the comparison) */
+    int32_t  op;               /* DataCompareOp */
+    int64_t  ivalue;           /* integer / bitmask threshold */
+    double   dvalue;           /* float / double threshold */
+} dl_view_scope;
+
+typedef struct dl_view_write
+{
+    uint64_t view_column;
+    uint64_t target_store;
+    uint64_t target_column;
+} dl_view_write;
+
+/* One node of a view's predicate program (RPN of leaves + And/Or/Not). kind: 0 leaf, 1 and, 2 or, 3 not.
+   A leaf addresses a cell like a projected column (source 0 = base, k>=1 = the (k-1)th join). is_range
+   nonzero = the fused interval test [ivalue, ivalue_hi] / [dvalue, dvalue_hi]; otherwise `op` is used
+   against the single threshold (ivalue / dvalue). Connective nodes ignore the leaf fields. */
+typedef struct dl_view_predicate
+{
+    int32_t  kind;
+    int32_t  is_range;
+    int32_t  source;
+    int32_t  column;
+    int32_t  type;             /* DataLensValueType */
+    int32_t  op;               /* DataCompareOp (ignored when is_range) */
+    int64_t  ivalue;           /* threshold / range lo (integer / bitmask) */
+    int64_t  ivalue_hi;        /* range hi (integer) */
+    double   dvalue;           /* threshold / range lo (float / double) */
+    double   dvalue_hi;        /* range hi (float / double) */
+} dl_view_predicate;
+
+/* Create a compiled read/write view. Parallel arrays; any count may be 0. Caller owns (dl_rwview_destroy). */
+DL_API dl_rwview* dl_rwview_create(uint64_t baseStore,
+                                   const dl_view_join* joins, int32_t joinCount,
+                                   const dl_view_column* columns, int32_t columnCount,
+                                   const dl_view_scope* scope, int32_t scopeCount);
+DL_API void dl_rwview_destroy(dl_rwview* view);
+
+/* Set the write-back: Insert/Update column maps + Delete target stores. */
+DL_API void dl_rwview_set_writeback(dl_rwview* view,
+                                    const dl_view_write* insert, int32_t insertCount,
+                                    const dl_view_write* update, int32_t updateCount,
+                                    const uint64_t* deleteStores, int32_t deleteCount);
+
+/* Set the predicate program (RPN of leaves + And/Or/Not, evaluated per base row after joins resolve).
+   count 0 clears it. ANDs with any scope list passed to dl_rwview_create. */
+DL_API void dl_rwview_set_scope_program(dl_rwview* view,
+                                        const dl_view_predicate* preds, int32_t predCount);
+
+/* Hydrate / commit against a store table (indexed by store index). Commit returns the ops applied. */
+DL_API void     dl_rwview_refresh(dl_rwview* view, const dl_store* const* stores, int32_t storeCount);
+DL_API uint64_t dl_rwview_commit(dl_rwview* view, dl_store* const* stores, int32_t storeCount);
+
+/* Payload + layout (the raw row-major bytes the Foundation marshals into a managed DataView). */
+DL_API uint64_t       dl_rwview_row_count(const dl_rwview* view);
+DL_API uint64_t       dl_rwview_column_count(const dl_rwview* view);
+DL_API uint64_t       dl_rwview_row_stride(const dl_rwview* view);
+DL_API uint64_t       dl_rwview_byte_size(const dl_rwview* view);
+DL_API const uint8_t* dl_rwview_data(const dl_rwview* view);
+DL_API uint8_t*       dl_rwview_mutable_data(dl_rwview* view);
+DL_API uint64_t       dl_rwview_column_offset(const dl_rwview* view, uint64_t col);
+DL_API uint64_t       dl_rwview_column_stride(const dl_rwview* view, uint64_t col);
+
+/* Change state + insert (the write surface). */
+DL_API uint8_t  dl_rwview_get_state(const dl_rwview* view, uint64_t viewRow);
+DL_API void     dl_rwview_set_state(dl_rwview* view, uint64_t viewRow, uint8_t state);
+DL_API uint64_t dl_rwview_add_row(dl_rwview* view);
+
+/* Source map (write-back record resolution). Returns UINT64_MAX (NoRow) when absent. */
+DL_API uint64_t dl_rwview_source_base_row(const dl_rwview* view, uint64_t viewRow);
+DL_API uint64_t dl_rwview_source_join_row(const dl_rwview* view, uint64_t viewRow, uint64_t join);
+
+/* Schedule a read/write view on the Lens (commit -> Systems -> refresh each due tick). */
+DL_API uint64_t dl_lens_add_scheduled_rwview(dl_lens* lens, dl_rwview* view, uint64_t period, uint64_t phase);
+DL_API void     dl_lens_clear_scheduled_rwviews(dl_lens* lens);
+DL_API uint64_t dl_lens_scheduled_rwview_count(const dl_lens* lens);
 
 #ifdef __cplusplus
 } /* extern "C" */

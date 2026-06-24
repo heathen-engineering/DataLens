@@ -13,6 +13,7 @@
 
 #include "datalens/DataStore.h"
 #include "datalens/DataView.h"
+#include "datalens/View.h"
 #include "datalens/Ir.h"
 #include "datalens/ThreadPool.h"
 
@@ -92,6 +93,16 @@ namespace datalens
         bool          useBand    = false;
         std::uint8_t  minLod     = 0;
         std::uint8_t  maxLod     = 255;
+    };
+
+    // A scheduled read/write View (§6.4): on its due tick the Lens commits its edits to the stores, then
+    // (after Systems) re-hydrates it. The View carries its own store-index references, so only its
+    // cadence is scheduled here. period is "run every N ticks" (the Foundation maps frequency -> period).
+    struct ScheduledRwView
+    {
+        View*         view   = nullptr; // non-owning
+        std::uint64_t period = 1;
+        std::uint64_t phase  = 0;
     };
 
     class Lens
@@ -411,6 +422,20 @@ namespace datalens
         void ClearScheduledViews() { mScheduledViews.clear(); }
         std::size_t ScheduledViewCount() const { return mScheduledViews.size(); }
 
+        /// Register a read/write View to commit + re-hydrate every `period` ticks (phase offset). The View
+        /// references its own stores; the store table is supplied to Tick.
+        std::size_t AddScheduledRwView(View* view, std::uint64_t period, std::uint64_t phase = 0)
+        {
+            ScheduledRwView v;
+            v.view = view;
+            v.period = period == 0 ? 1 : period;
+            v.phase = phase;
+            mScheduledRwViews.push_back(v);
+            return mScheduledRwViews.size() - 1;
+        }
+        void ClearScheduledRwViews() { mScheduledRwViews.clear(); }
+        std::size_t ScheduledRwViewCount() const { return mScheduledRwViews.size(); }
+
         std::uint64_t CurrentTick() const { return mTick; }
         void ResetTick(std::uint64_t tick = 0) { mTick = tick; }
 
@@ -422,6 +447,18 @@ namespace datalens
         {
             ++mTick;
 
+            // The §6.4 tick order: Commit read/write View edits -> run Systems -> re-hydrate Views.
+            if (!mScheduledRwViews.empty())
+            {
+                std::vector<DataStore*> mut(stores, stores + storeCount);
+                for (const ScheduledRwView& v : mScheduledRwViews)
+                {
+                    if (v.view == nullptr) continue;
+                    if (mTick % v.period != v.phase % v.period) continue;
+                    v.view->Commit(mut);
+                }
+            }
+
             std::size_t affected = 0;
             for (const ScheduledProgram& s : mSchedule)
                 if (mTick % s.period == s.phase % s.period)
@@ -432,6 +469,17 @@ namespace datalens
                 if (v.view == nullptr || v.storeIndex >= storeCount) continue;
                 if (mTick % v.period != v.phase % v.period) continue;
                 RefreshView(*v.view, *stores[v.storeIndex], v.useBand, v.minLod, v.maxLod);
+            }
+
+            if (!mScheduledRwViews.empty())
+            {
+                std::vector<const DataStore*> cst(stores, stores + storeCount);
+                for (const ScheduledRwView& v : mScheduledRwViews)
+                {
+                    if (v.view == nullptr) continue;
+                    if (mTick % v.period != v.phase % v.period) continue;
+                    v.view->Refresh(cst);
+                }
             }
 
             return affected;
@@ -564,5 +612,6 @@ namespace datalens
         std::uint64_t mTick = 0;
         std::vector<ScheduledProgram> mSchedule;
         std::vector<ScheduledView> mScheduledViews;
+        std::vector<ScheduledRwView> mScheduledRwViews;
     };
 }

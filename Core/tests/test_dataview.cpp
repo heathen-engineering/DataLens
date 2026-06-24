@@ -3,6 +3,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "TestTags.h"
+
 #include "datalens/DataStore.h"
 #include "datalens/DataView.h"
 #include "datalens/Lens.h"
@@ -15,9 +17,9 @@ namespace
     // Store: [Health(float), Team(int32), Mana(float)], `rows` live rows seeded by index.
     DataStore MakeActors(size_t rows)
     {
-        std::vector<DataStoreColumnSchema> cols = {{"Health", DataLensValueType::Float},
-                                                   {"Team",   DataLensValueType::Int32},
-                                                   {"Mana",   DataLensValueType::Float}};
+        std::vector<DataStoreColumnSchema> cols = {{Tag("Health"), DataLensValueType::Float},
+                                                   {Tag("Team"),   DataLensValueType::Int32},
+                                                   {Tag("Mana"),   DataLensValueType::Float}};
         DataStore s(cols, rows);
         for (size_t r = 0; r < rows; ++r)
         {
@@ -137,8 +139,8 @@ TEST_CASE("dataview: parallel Lens::RefreshView matches serial Refresh", "[datav
 {
     const size_t rows = 40000;
     auto build = [&]() {
-        std::vector<DataStoreColumnSchema> cols = {{"X", DataLensValueType::Float},
-                                                   {"Y", DataLensValueType::Float}};
+        std::vector<DataStoreColumnSchema> cols = {{Tag("X"), DataLensValueType::Float},
+                                                   {Tag("Y"), DataLensValueType::Float}};
         DataStore s(cols, rows);
         for (size_t r = 0; r < rows; ++r)
         {

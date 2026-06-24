@@ -3,6 +3,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "TestTags.h"
+
 #include "datalens/DataStore.h"
 
 #include <cstdint>
@@ -14,9 +16,9 @@ namespace
     std::vector<DataStoreColumnSchema> ThreeCols()
     {
         return {
-            {"ColFloat",  DataLensValueType::Float},
-            {"ColInt32",  DataLensValueType::Int32},
-            {"ColDouble", DataLensValueType::Double},
+            {Tag("ColFloat"),  DataLensValueType::Float},
+            {Tag("ColInt32"),  DataLensValueType::Int32},
+            {Tag("ColDouble"), DataLensValueType::Double},
         };
     }
 
@@ -193,10 +195,10 @@ TEST_CASE("column buffers are cache-line aligned (A3.6)", "[datastore]")
     // A mix of strides (4, 4, 8) plus a wide one — every column buffer must start 64-aligned so
     // concurrent Systems writing different columns never false-share a cache line.
     std::vector<DataStoreColumnSchema> cols = {
-        {"A", DataLensValueType::Float},  // 4
-        {"B", DataLensValueType::Int32},  // 4
-        {"C", DataLensValueType::Double}, // 8
-        {"D", DataLensValueType::Int64},  // 8
+        {Tag("A"), DataLensValueType::Float},  // 4
+        {Tag("B"), DataLensValueType::Int32},  // 4
+        {Tag("C"), DataLensValueType::Double}, // 8
+        {Tag("D"), DataLensValueType::Int64},  // 8
     };
     DataStore store(cols, 1000);
     for (size_t c = 0; c < store.GetColumnCount(); ++c)
@@ -205,9 +207,9 @@ TEST_CASE("column buffers are cache-line aligned (A3.6)", "[datastore]")
     // Still aligned after a schema conversion (rebuilds the column buffers).
     DataStoreSchema wider;
     wider.Columns = {
-        {"A", DataLensValueType::Double}, // widen 4 -> 8
-        {"C", DataLensValueType::Double},
-        {"E", DataLensValueType::Int32},  // new column
+        {Tag("A"), DataLensValueType::Double}, // widen 4 -> 8
+        {Tag("C"), DataLensValueType::Double},
+        {Tag("E"), DataLensValueType::Int32},  // new column
     };
     store.ConvertToSchema(wider);
     for (size_t c = 0; c < store.GetColumnCount(); ++c)

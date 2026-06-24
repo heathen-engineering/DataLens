@@ -14,11 +14,30 @@
 #include <cstring>
 #include <stdexcept>
 
-size_t DataStoreSchema::GetColumnIndex(const std::string& name) const
+DataStoreSchema::DataStoreSchema(
+	DataLensId tag,
+	const std::vector<DataStoreColumnSchema>& columns,
+	std::size_t capacity,
+	uint32_t version)
+	: Tag(tag)
+	, Columns(columns)
+	, DefaultCapacity(capacity)
+	, Version(version)
+{
+	// Ensure the reserved 1-byte RowFlags column exists as the first column.
+	if (Columns.empty() || Columns[0].Tag != DataLensRowFlagsTag)
+	{
+		DataStoreColumnSchema flagColumn(DataLensRowFlagsTag, std::size_t{1});
+		flagColumn.DefaultValue = { 0 };
+		Columns.insert(Columns.begin(), flagColumn);
+	}
+}
+
+size_t DataStoreSchema::FindColumn(DataLensId columnTag) const
 {
 	for (size_t i = 0; i < Columns.size(); ++i)
 	{
-		if (Columns[i].Name == name)
+		if (Columns[i].Tag == columnTag)
 			return i;
 	}
 	return SIZE_MAX; // not found
@@ -37,43 +56,44 @@ size_t DataStoreSchema::GetStride() const
 bool DataStoreSchema::Validate() const
 {
 	if (Columns.size() < 2)
-	{
 		return false;
-	}
-
-	if (Columns[0].Name != DataLensRowFlagsName)
-	{
+	if (Columns[0].Tag != DataLensRowFlagsTag)
 		return false;
-	}
-
-	if (Columns[0].Type != DataLensValueType::UInt8)
-	{
+	if (Columns[0].GetStride() != 1)
 		return false;
-	}
-
 	return true;
 }
 
-void DataLensSchema::AddStore(const DataStoreSchema& store) { mStores.push_back(store); }
-
-const DataStoreSchema* DataLensSchema::GetStore(const std::string& name) const
+void DataLensSchema::AddStore(const DataStoreSchema& store)
 {
-	for (const auto& s : mStores)
+	const size_t storeIndex = mStores.size();
+	mStores.push_back(store);
+	mStoreTagToIndex[store.Tag] = storeIndex;
+	for (size_t c = 0; c < store.Columns.size(); ++c)
 	{
-		if (s.Name == name)
-		{
-			return &s;
-		}
+		const DataLensId tag = store.Columns[c].Tag;
+		if (tag == DataLensRowFlagsTag)
+			continue; // reserved, present in every store -> resolved per store, not globally
+		mColumnTagToLocation[tag] = { storeIndex, c };
 	}
-	return nullptr;
 }
 
-bool DataLensSchema::HasStore(const std::string& name) const
+size_t DataLensSchema::FindStore(DataLensId storeTag) const
 {
-	return GetStore(name) != nullptr;
+	auto it = mStoreTagToIndex.find(storeTag);
+	return it == mStoreTagToIndex.end() ? SIZE_MAX : it->second;
 }
 
-// Number of stores
+bool DataLensSchema::ResolveColumn(DataLensId columnTag, size_t& storeIndex, size_t& columnIndex) const
+{
+	auto it = mColumnTagToLocation.find(columnTag);
+	if (it == mColumnTagToLocation.end())
+		return false;
+	storeIndex = it->second.first;
+	columnIndex = it->second.second;
+	return true;
+}
+
 size_t DataLensSchema::Count() const
 {
 	return mStores.size();

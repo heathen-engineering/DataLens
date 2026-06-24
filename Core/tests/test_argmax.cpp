@@ -4,6 +4,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "TestTags.h"
+
 #include "datalens/DataStore.h"
 #include "datalens/Lens.h"
 
@@ -16,10 +18,10 @@ namespace
     DataStore MakeChoiceStore(size_t n)
     {
         std::vector<DataStoreColumnSchema> cols = {
-            {"S0",     DataLensValueType::Float},
-            {"S1",     DataLensValueType::Float},
-            {"S2",     DataLensValueType::Float},
-            {"Choice", DataLensValueType::Int32},
+            {Tag("S0"),     DataLensValueType::Float},
+            {Tag("S1"),     DataLensValueType::Float},
+            {Tag("S2"),     DataLensValueType::Float},
+            {Tag("Choice"), DataLensValueType::Int32},
         };
         DataStore s(cols, n);
         for (size_t r = 0; r < n; ++r)

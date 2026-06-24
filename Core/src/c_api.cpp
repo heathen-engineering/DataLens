@@ -13,6 +13,7 @@
 #include "datalens/DataView.h"
 #include "datalens/Ir.h"
 #include "datalens/Lens.h"
+#include "datalens/View.h"
 
 #include <string>
 #include <vector>
@@ -27,6 +28,8 @@ namespace
     const datalens::IrProgram* AsProgram(const dl_ir_program* p) { return reinterpret_cast<const datalens::IrProgram*>(p); }
     datalens::DataView* AsView(dl_view* v) { return reinterpret_cast<datalens::DataView*>(v); }
     const datalens::DataView* AsView(const dl_view* v) { return reinterpret_cast<const datalens::DataView*>(v); }
+    datalens::View* AsRwView(dl_rwview* v) { return reinterpret_cast<datalens::View*>(v); }
+    const datalens::View* AsRwView(const dl_rwview* v) { return reinterpret_cast<const datalens::View*>(v); }
 
     // The store table crosses the ABI as dl_store*; each is a DataStore*.
     DataStore* const* AsStoreTable(dl_store* const* stores)
@@ -93,21 +96,25 @@ int32_t dl_smallest_int_type(int64_t minValue, int64_t maxValue)
     return static_cast<int32_t>(DataLensValueTypeUtils::SmallestSignedForRange(minValue, maxValue));
 }
 
-dl_store* dl_store_create(const char* const* colNames,
-                          const int32_t* colTypes,
+dl_store* dl_store_create(const uint64_t* colTags,
+                          const uint64_t* colStrides,
+                          const uint8_t*  colDefaults,
                           int32_t colCount,
                           uint64_t preallocRows)
 {
-    if (colCount <= 0 || colNames == nullptr || colTypes == nullptr)
+    if (colCount <= 0 || colTags == nullptr || colStrides == nullptr)
         return nullptr;
 
     std::vector<DataStoreColumnSchema> cols;
     cols.reserve(static_cast<size_t>(colCount));
+    size_t defOffset = 0; // colDefaults is the columns' default values concatenated in order
     for (int32_t i = 0; i < colCount; ++i)
     {
-        DataStoreColumnSchema c;
-        c.Name = colNames[i] ? colNames[i] : "";
-        c.Type = static_cast<DataLensValueType>(colTypes[i]);
+        const size_t stride = static_cast<size_t>(colStrides[i]);
+        DataStoreColumnSchema c(static_cast<DataLensId>(colTags[i]), stride);
+        if (colDefaults != nullptr)
+            c.DefaultValue.assign(colDefaults + defOffset, colDefaults + defOffset + stride);
+        defOffset += stride;
         cols.push_back(std::move(c));
     }
 
@@ -651,5 +658,150 @@ uint64_t dl_view_byte_size(const dl_view* view)
 {
     return view ? AsView(view)->ByteSize() : 0;
 }
+
+/* ---- The read/write View (§6.4) ---- */
+
+dl_rwview* dl_rwview_create(uint64_t baseStore,
+                            const dl_view_join* joins, int32_t joinCount,
+                            const dl_view_column* columns, int32_t columnCount,
+                            const dl_view_scope* scope, int32_t scopeCount)
+{
+    std::vector<datalens::ViewJoin> j;
+    for (int32_t i = 0; joins && i < joinCount; ++i)
+    {
+        datalens::ViewJoin vj;
+        vj.TargetStore = static_cast<size_t>(joins[i].target_store);
+        vj.Aligned = joins[i].aligned != 0;
+        vj.IndexColumn = static_cast<size_t>(joins[i].index_column);
+        vj.AbsentSentinel = joins[i].absent_sentinel;
+        j.push_back(vj);
+    }
+    std::vector<datalens::ViewColumn> c;
+    for (int32_t i = 0; columns && i < columnCount; ++i)
+        c.push_back({static_cast<size_t>(columns[i].source), static_cast<size_t>(columns[i].column)});
+    std::vector<datalens::ViewScope> s;
+    for (int32_t i = 0; scope && i < scopeCount; ++i)
+    {
+        datalens::ViewScope vs;
+        vs.Column = static_cast<size_t>(scope[i].column);
+        vs.Type = static_cast<DataLensValueType>(scope[i].type);
+        vs.Op = static_cast<DataCompareOp>(scope[i].op);
+        vs.IValue = scope[i].ivalue;
+        vs.DValue = scope[i].dvalue;
+        s.push_back(vs);
+    }
+    return reinterpret_cast<dl_rwview*>(
+        new datalens::View(static_cast<size_t>(baseStore), std::move(j), std::move(c), std::move(s)));
+}
+
+void dl_rwview_destroy(dl_rwview* view) { delete AsRwView(view); }
+
+void dl_rwview_set_writeback(dl_rwview* view,
+                             const dl_view_write* insert, int32_t insertCount,
+                             const dl_view_write* update, int32_t updateCount,
+                             const uint64_t* deleteStores, int32_t deleteCount)
+{
+    if (!view) return;
+    datalens::ViewWriteBack wb;
+    for (int32_t i = 0; insert && i < insertCount; ++i)
+        wb.Insert.push_back({static_cast<size_t>(insert[i].view_column),
+                             static_cast<size_t>(insert[i].target_store),
+                             static_cast<size_t>(insert[i].target_column)});
+    for (int32_t i = 0; update && i < updateCount; ++i)
+        wb.Update.push_back({static_cast<size_t>(update[i].view_column),
+                             static_cast<size_t>(update[i].target_store),
+                             static_cast<size_t>(update[i].target_column)});
+    for (int32_t i = 0; deleteStores && i < deleteCount; ++i)
+        wb.Delete.push_back(static_cast<size_t>(deleteStores[i]));
+    AsRwView(view)->SetWriteBack(std::move(wb));
+}
+
+void dl_rwview_set_scope_program(dl_rwview* view, const dl_view_predicate* preds, int32_t predCount)
+{
+    if (!view) return;
+    std::vector<datalens::ViewPredicate> prog;
+    for (int32_t i = 0; preds && i < predCount; ++i)
+    {
+        datalens::ViewPredicate p;
+        p.Kind   = static_cast<datalens::ViewPredicateKind>(preds[i].kind);
+        p.Range  = preds[i].is_range != 0;
+        p.Source = static_cast<size_t>(preds[i].source);
+        p.Column = static_cast<size_t>(preds[i].column);
+        p.Type   = static_cast<DataLensValueType>(preds[i].type);
+        p.Op     = static_cast<DataCompareOp>(preds[i].op);
+        p.IValue = preds[i].ivalue;
+        p.IHi    = preds[i].ivalue_hi;
+        p.DValue = preds[i].dvalue;
+        p.DHi    = preds[i].dvalue_hi;
+        prog.push_back(p);
+    }
+    AsRwView(view)->SetScopeProgram(std::move(prog));
+}
+
+void dl_rwview_refresh(dl_rwview* view, const dl_store* const* stores, int32_t storeCount)
+{
+    if (!view) return;
+    std::vector<const DataStore*> t;
+    t.reserve(static_cast<size_t>(storeCount));
+    for (int32_t i = 0; stores && i < storeCount; ++i)
+        t.push_back(AsStore(stores[i]));
+    AsRwView(view)->Refresh(t);
+}
+
+uint64_t dl_rwview_commit(dl_rwview* view, dl_store* const* stores, int32_t storeCount)
+{
+    if (!view) return 0;
+    std::vector<DataStore*> t;
+    t.reserve(static_cast<size_t>(storeCount));
+    for (int32_t i = 0; stores && i < storeCount; ++i)
+        t.push_back(AsStore(stores[i]));
+    return AsRwView(view)->Commit(t);
+}
+
+uint64_t dl_rwview_row_count(const dl_rwview* view)    { return view ? AsRwView(view)->RowCount() : 0; }
+uint64_t dl_rwview_column_count(const dl_rwview* view) { return view ? AsRwView(view)->ColumnCount() : 0; }
+uint64_t dl_rwview_row_stride(const dl_rwview* view)   { return view ? AsRwView(view)->RowStride() : 0; }
+uint64_t dl_rwview_byte_size(const dl_rwview* view)    { return view ? AsRwView(view)->ByteSize() : 0; }
+const uint8_t* dl_rwview_data(const dl_rwview* view)   { return view ? AsRwView(view)->Data() : nullptr; }
+uint8_t* dl_rwview_mutable_data(dl_rwview* view)       { return view ? AsRwView(view)->MutableRowData(0) : nullptr; }
+
+uint64_t dl_rwview_column_offset(const dl_rwview* view, uint64_t col)
+{
+    return (view && col < AsRwView(view)->ColumnCount()) ? AsRwView(view)->ColumnOffset(static_cast<size_t>(col)) : 0;
+}
+uint64_t dl_rwview_column_stride(const dl_rwview* view, uint64_t col)
+{
+    return (view && col < AsRwView(view)->ColumnCount()) ? AsRwView(view)->ColumnStride(static_cast<size_t>(col)) : 0;
+}
+
+uint8_t dl_rwview_get_state(const dl_rwview* view, uint64_t viewRow)
+{
+    return (view && viewRow < AsRwView(view)->RowCount())
+        ? static_cast<uint8_t>(AsRwView(view)->State(static_cast<size_t>(viewRow))) : 0;
+}
+void dl_rwview_set_state(dl_rwview* view, uint64_t viewRow, uint8_t state)
+{
+    if (view && viewRow < AsRwView(view)->RowCount())
+        AsRwView(view)->SetState(static_cast<size_t>(viewRow), static_cast<datalens::ViewRowState>(state));
+}
+uint64_t dl_rwview_add_row(dl_rwview* view) { return view ? AsRwView(view)->AddRow() : 0; }
+
+uint64_t dl_rwview_source_base_row(const dl_rwview* view, uint64_t viewRow)
+{
+    return (view && viewRow < AsRwView(view)->RowCount())
+        ? AsRwView(view)->SourceBaseRow(static_cast<size_t>(viewRow)) : datalens::View::NoRow;
+}
+uint64_t dl_rwview_source_join_row(const dl_rwview* view, uint64_t viewRow, uint64_t join)
+{
+    return (view && viewRow < AsRwView(view)->RowCount())
+        ? AsRwView(view)->SourceJoinRow(static_cast<size_t>(viewRow), static_cast<size_t>(join)) : datalens::View::NoRow;
+}
+
+uint64_t dl_lens_add_scheduled_rwview(dl_lens* lens, dl_rwview* view, uint64_t period, uint64_t phase)
+{
+    return (lens && view) ? AsLens(lens)->AddScheduledRwView(AsRwView(view), period, phase) : 0;
+}
+void dl_lens_clear_scheduled_rwviews(dl_lens* lens) { if (lens) AsLens(lens)->ClearScheduledRwViews(); }
+uint64_t dl_lens_scheduled_rwview_count(const dl_lens* lens) { return lens ? AsLens(lens)->ScheduledRwViewCount() : 0; }
 
 } // extern "C"

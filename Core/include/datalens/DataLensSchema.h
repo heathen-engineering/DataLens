@@ -9,11 +9,21 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
-static constexpr const char* DataLensRowFlagsName = "DataLensRowFlags";
+// Core word type: the CPU size_t (the engine layer translates to u64/ulong). Store ids, column ids
+// (tags) and indices are all DataLensId. Tags are trusted globally unique: the engine hashes the human
+// path (e.g. "DataLens.HATE.MagicTrait.Mana") above Core; Core only ever consumes the id.
+using DataLensId = std::size_t;
+
+// The reserved id of the auto-prepended 1-byte validity/locked flags column. It is present in EVERY
+// store, so it is excluded from the global column->store resolution (resolved per store instead).
+static constexpr DataLensId DataLensRowFlagsTag = 0;
 
 enum class DataLensValueType : uint8_t
 {
@@ -185,18 +195,22 @@ namespace DataLensValueTypeUtils
 	DataLensValueType SmallestSignedForRange(int64_t minValue, int64_t maxValue);
 }
 
+// A column: a globally-unique id and a byte stride. Core is type-blind — it stores and acts on raw
+// bits by stride only. A DataLensValueType may be passed at construction purely as a stride shorthand
+// (a note-to-self); it resolves to a stride and is then discarded (DataLens-Spec.md §5).
 struct DataStoreColumnSchema
 {
-	std::string Name;
-	DataLensValueType Type;
+	DataLensId Tag = 0;
+	std::size_t Stride = 0;
+	std::vector<uint8_t> DefaultValue; // optional, stride-sized
 
-	size_t GetStride() const
-	{
-		return DataLensValueTypeUtils::GetStride(Type);
-	}
+	DataStoreColumnSchema() = default;
+	DataStoreColumnSchema(DataLensId tag, std::size_t stride)
+		: Tag(tag), Stride(stride) {}
+	DataStoreColumnSchema(DataLensId tag, DataLensValueType type)
+		: Tag(tag), Stride(DataLensValueTypeUtils::GetStride(type)) {}
 
-	bool Optional = false;
-	std::vector<uint8_t> DefaultValue; // optional
+	size_t GetStride() const { return Stride; }
 };
 
 struct DataViewColumnSchema
@@ -210,63 +224,40 @@ struct DataViewColumnSchema
 	}
 };
 
+// A store ("table"): an id and its stride-typed columns. No key, no relations — DataLens is not
+// relational; gluing records across stores is a View concern (§6.4). The constructor auto-prepends the
+// reserved RowFlags column. Capacity is the pre-allocated bound (DataLens avoids grow/shrink).
 struct DataStoreSchema
 {
-	std::string Name;
+	DataLensId Tag = 0;
 	std::vector<DataStoreColumnSchema> Columns;
-	uint64_t DefaultCapacity;
+	std::size_t DefaultCapacity = 0;
 	uint32_t Version = 1;
-	
-	size_t GetColumnIndex(const std::string& name) const;
 
 	DataStoreSchema() = default;
-
 	DataStoreSchema(
-		const std::string& name,
+		DataLensId tag,
 		const std::vector<DataStoreColumnSchema>& columns,
-		uint64_t rowCount,
-		uint32_t version = 1
-	)
-		: Name(name)
-		, DefaultCapacity(rowCount)
-		, Version(version)
-	{
-		Columns = columns;
+		std::size_t capacity,
+		uint32_t version = 1);
 
-		// Ensure row flags column exists as first column
-		if (Columns.empty() || Columns[0].Name != DataLensRowFlagsName || Columns[0].Type != DataLensValueType::UInt8)
-		{
-			DataStoreColumnSchema flagColumn;
-			flagColumn.Name = DataLensRowFlagsName;
-			flagColumn.Type = DataLensValueType::UInt8;
-			flagColumn.Optional = false;
-			flagColumn.DefaultValue = { 0 };
-
-			// If columns already have something, insert flag column at front
-			if (!Columns.empty())
-			{
-				Columns.insert(Columns.begin(), flagColumn);
-			}
-			else
-			{
-				Columns.push_back(flagColumn);
-			}
-		}
-	}
-
-	size_t GetStride() const;
-
+	size_t FindColumn(DataLensId columnTag) const; // column tag -> local index, or SIZE_MAX
+	size_t GetStride() const;                       // sum of column strides
 	bool Validate() const;
 };
 
+// The whole-database description + DataLens's own resolution maps (held at the Lens level, not in the
+// dumb stores and not borrowed from GameplayTags). Column ids are trusted globally unique, so a column
+// id resolves to exactly one (store, column).
 class DataLensSchema
 {
 public:
-	void AddStore(const DataStoreSchema& store);
+	void AddStore(const DataStoreSchema& store); // appends + indexes its store/column tags
 
-	const DataStoreSchema* GetStore(const std::string& name) const;
-
-	bool HasStore(const std::string& name) const;
+	size_t FindStore(DataLensId storeTag) const;                 // store id -> index, or SIZE_MAX
+	bool ResolveColumn(DataLensId columnTag,                     // column id -> (store, column)
+	                   size_t& storeIndex, size_t& columnIndex) const;
+	bool HasStore(DataLensId storeTag) const { return FindStore(storeTag) != SIZE_MAX; }
 
 	// Indexed access
 	const DataStoreSchema& operator[](size_t index) const { return mStores.at(index); }
@@ -277,6 +268,8 @@ public:
 
 private:
 	std::vector<DataStoreSchema> mStores;
+	std::unordered_map<DataLensId, size_t> mStoreTagToIndex;
+	std::unordered_map<DataLensId, std::pair<size_t, size_t>> mColumnTagToLocation;
 };
 
 struct DataQueryJoin

@@ -3,6 +3,8 @@
 // the HATE-Spec §8 considerations primitive. Curves are uniform per pass and transcendental-free.
 
 #include <catch2/catch_test_macros.hpp>
+
+#include "TestTags.h"
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include "datalens/DataStore.h"
@@ -19,8 +21,8 @@ namespace
     DataStore MakeScoreStore(size_t n, float scoreInit, float (*gen)(size_t))
     {
         std::vector<DataStoreColumnSchema> cols = {
-            {"Metric", DataLensValueType::Float},
-            {"Score",  DataLensValueType::Float},
+            {Tag("Metric"), DataLensValueType::Float},
+            {Tag("Score"),  DataLensValueType::Float},
         };
         DataStore s(cols, n);
         for (size_t r = 0; r < n; ++r)

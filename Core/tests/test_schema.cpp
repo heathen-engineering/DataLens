@@ -3,8 +3,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "datalens/DataLensSchema.h"
+#include "TestTags.h"
 
-#include <string>
 #include <vector>
 
 namespace
@@ -12,33 +12,33 @@ namespace
     std::vector<DataStoreColumnSchema> ThreeCols()
     {
         return {
-            {"ColFloat",  DataLensValueType::Float},
-            {"ColInt32",  DataLensValueType::Int32},
-            {"ColDouble", DataLensValueType::Double},
+            {Tag("ColFloat"),  DataLensValueType::Float},
+            {Tag("ColInt32"),  DataLensValueType::Int32},
+            {Tag("ColDouble"), DataLensValueType::Double},
         };
     }
 }
 
 TEST_CASE("schema auto-inserts the RowFlags column at index 0", "[schema]")
 {
-    DataStoreSchema s("Actors", ThreeCols(), 10);
+    DataStoreSchema s(Tag("Actors"), ThreeCols(), 10);
 
     REQUIRE(s.Columns.size() == 4); // RowFlags + the three declared columns
-    REQUIRE(s.Columns[0].Name == std::string(DataLensRowFlagsName));
-    REQUIRE(s.Columns[0].Type == DataLensValueType::UInt8);
+    REQUIRE(s.Columns[0].Tag == DataLensRowFlagsTag);
+    REQUIRE(s.Columns[0].GetStride() == 1);
 }
 
-TEST_CASE("GetColumnIndex accounts for the RowFlags column", "[schema]")
+TEST_CASE("FindColumn accounts for the RowFlags column", "[schema]")
 {
-    DataStoreSchema s("Actors", ThreeCols(), 10);
-    REQUIRE(s.GetColumnIndex("ColFloat")  == 1);
-    REQUIRE(s.GetColumnIndex("ColInt32")  == 2);
-    REQUIRE(s.GetColumnIndex("ColDouble") == 3);
+    DataStoreSchema s(Tag("Actors"), ThreeCols(), 10);
+    REQUIRE(s.FindColumn(Tag("ColFloat"))  == 1);
+    REQUIRE(s.FindColumn(Tag("ColInt32"))  == 2);
+    REQUIRE(s.FindColumn(Tag("ColDouble")) == 3);
 }
 
 TEST_CASE("schema validates and reports stride", "[schema]")
 {
-    DataStoreSchema s("Actors", ThreeCols(), 10);
+    DataStoreSchema s(Tag("Actors"), ThreeCols(), 10);
     REQUIRE(s.Validate());
     REQUIRE(s.GetStride() == 17); // 1 (RowFlags) + 4 + 4 + 8
 }
@@ -60,13 +60,20 @@ TEST_CASE("range-narrowing picks the smallest byte-aligned type (A2)", "[schema]
     REQUIRE(SmallestSignedForRange(-5000000000, 0)   == DataLensValueType::Int64);
 }
 
-TEST_CASE("DataLensSchema stores are addressable by name", "[schema]")
+TEST_CASE("DataLensSchema stores and columns are addressable by tag", "[schema]")
 {
     DataLensSchema lens;
-    lens.AddStore(DataStoreSchema("Actors", ThreeCols(), 10));
+    lens.AddStore(DataStoreSchema(Tag("Actors"), ThreeCols(), 10));
 
     REQUIRE(lens.Count() == 1);
-    REQUIRE(lens.HasStore("Actors"));
-    REQUIRE(lens.GetStore("Actors") != nullptr);
-    REQUIRE(lens.GetStore("DoesNotExist") == nullptr);
+    REQUIRE(lens.HasStore(Tag("Actors")));
+    REQUIRE(lens.FindStore(Tag("Actors")) != SIZE_MAX);
+    REQUIRE(lens.FindStore(Tag("DoesNotExist")) == SIZE_MAX);
+
+    // Column ids are globally unique -> resolve to (store, column).
+    size_t store = SIZE_MAX, col = SIZE_MAX;
+    REQUIRE(lens.ResolveColumn(Tag("ColInt32"), store, col));
+    REQUIRE(store == 0);
+    REQUIRE(col == 2);
+    REQUIRE_FALSE(lens.ResolveColumn(Tag("Nope"), store, col));
 }
